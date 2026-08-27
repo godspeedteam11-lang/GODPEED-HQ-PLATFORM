@@ -1,5 +1,6 @@
 /* ==========================================================================
    GODSPEED HQ - Enterprise Dark CSS Design System (PRD v1.1 Architecture)
+   Supports Two-Portal Architecture (Member Portal & Super Admin Control Center)
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -17,6 +18,7 @@
   --accent-pink: #ec4899;
   --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
   --accent-gold: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  --accent-admin: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #991b1b 100%);
 
   --status-green: #10b981;
   --status-green-bg: rgba(16, 185, 129, 0.15);
@@ -59,10 +61,173 @@ body {
   background-attachment: fixed;
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   overflow-x: hidden;
 }
 
-/* App Container */
+/* PUBLIC LANDING & AUTHENTICATION PORTAL LAYOUTS */
+.public-portal-container {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.public-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 3rem;
+  background: rgba(15, 23, 42, 0.85);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 500;
+}
+
+.public-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.public-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.hero-title {
+  font-size: 3.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 1.25rem;
+  line-height: 1.15;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-subtitle {
+  font-size: 1.15rem;
+  color: var(--text-muted);
+  max-width: 720px;
+  line-height: 1.6;
+  margin-bottom: 2.5rem;
+}
+
+.auth-card-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 80px);
+  padding: 2rem;
+}
+
+.auth-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 440px;
+  padding: 2.25rem;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-main);
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.auth-header h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+}
+
+.auth-header p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.form-group {
+  margin-bottom: 1.25rem;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+.form-input, .form-select {
+  width: 100%;
+  padding: 0.75rem 0.95rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus, .form-select:focus {
+  border-color: var(--accent-primary);
+}
+
+/* SUPER ADMIN CONTROL CENTER SPECIAL STYLING */
+.admin-login-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 30%, rgba(239, 68, 68, 0.12) 0%, transparent 50%), #090d16;
+  padding: 2rem;
+}
+
+.admin-card {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.15);
+}
+
+.admin-badge-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: var(--radius-md);
+  background: var(--accent-admin);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: #fff;
+  margin: 0 auto 1rem auto;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
+
+.access-denied-card {
+  text-align: center;
+  padding: 3rem 2rem;
+  max-width: 500px;
+  margin: 4rem auto;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid var(--status-red);
+  border-radius: var(--radius-lg);
+}
+
+/* MEMBER APPLICATION PORTAL LAYOUT */
 .godspeed-layout {
   display: flex;
   width: 100vw;
@@ -278,29 +443,6 @@ body {
   cursor: pointer;
 }
 
-/* User Identity Switcher (For Demo Context Testing) */
-.user-identity-box {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-color);
-  padding: 0.4rem 0.75rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.775rem;
-  color: var(--text-muted);
-}
-
-.user-identity-select {
-  background: transparent;
-  border: none;
-  color: var(--text-main);
-  font-weight: 600;
-  font-size: 0.8rem;
-  outline: none;
-  cursor: pointer;
-}
-
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -314,6 +456,7 @@ body {
   cursor: pointer;
   border: none;
   transition: all 0.2s ease;
+  text-decoration: none;
 }
 
 .btn-primary {
@@ -329,6 +472,13 @@ body {
   border: 1px solid var(--border-color);
 }
 .btn-secondary:hover { background: rgba(255, 255, 255, 0.12); }
+
+.btn-admin {
+  background: var(--accent-admin);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+}
+.btn-admin:hover { opacity: 0.92; transform: translateY(-1px); }
 
 .btn-sm {
   padding: 0.4rem 0.85rem;
@@ -510,24 +660,6 @@ body {
   color: var(--text-muted);
 }
 
-/* 10/20/70 Split Visual Bar */
-.split-bar-container {
-  display: flex;
-  height: 12px;
-  border-radius: 6px;
-  overflow: hidden;
-  margin: 0.75rem 0;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.split-part {
-  height: 100%;
-  transition: width 0.4s ease;
-}
-.part-due { background: #3b82f6; width: 10%; }
-.part-personal { background: #10b981; width: 20%; }
-.part-business { background: #8b5cf6; width: 70%; }
-
 /* Modals */
 .modal-overlay {
   position: fixed;
@@ -620,4 +752,6 @@ body {
   .brand-header { justify-content: center; padding: 0.5rem 0; }
   .nav-link { justify-content: center; }
   .main-viewport { margin-left: 70px; max-width: calc(100vw - 70px); padding: 1rem; }
+  .public-navbar { padding: 1rem; }
+  .hero-title { font-size: 2.25rem; }
 }

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GODSPEED HQ — Control Center (Admin Portal)</title>
+  <meta name="description" content="Super Admin Control Center for GODSPEED HQ organization management.">
+
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/godspeed.css">
+</head>
+<body>
+
+  <!-- ============================================================================
+       PORTAL 2 VIEW 1: DEDICATED SUPER ADMIN LOGIN SCREEN
+       ============================================================================ -->
+  <div id="view-admin-login" class="admin-login-wrapper" style="display:flex;">
+    <div class="auth-card admin-card">
+      <div class="admin-badge-icon">
+        <i class="fas fa-shield-alt"></i>
+      </div>
+      <div class="auth-header">
+        <h2 style="color:#fff;">GODSPEED HQ</h2>
+        <span class="badge badge-red" style="margin-bottom:0.75rem;">CONTROL CENTER</span>
+        <p>Administrator Authentication Required</p>
+      </div>
+
+      <form id="form-admin-login">
+        <div class="form-group">
+          <label for="admin-email">Administrator Email</label>
+          <input type="email" id="admin-email" class="form-input" placeholder="admin@godspeed.org" value="admin@godspeed.org" required>
+        </div>
+        <div class="form-group">
+          <label for="admin-password">Password</label>
+          <input type="password" id="admin-password" class="form-input" placeholder="••••••••" value="password123" required>
+        </div>
+
+        <button type="submit" class="btn btn-admin" style="width:100%; margin-top:0.75rem; padding:0.75rem;">
+          <i class="fas fa-key"></i> Authenticate Control Center
+        </button>
+      </form>
+
+      <div style="text-align:center; margin-top:1.5rem; font-size:0.8rem; color:var(--text-muted);">
+        <i class="fas fa-lock"></i> Restricted Security Zone. All login attempts are audited.
+        <br><br>
+        <a href="index.html" style="color:var(--text-dim); text-decoration:none;"><i class="fas fa-arrow-left"></i> Return to Main Website</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       PORTAL 2 VIEW 2: ACCESS DENIED 403 SCREEN (Shown for non-admin users)
+       ============================================================================ -->
+  <div id="view-admin-denied" class="access-denied-card" style="display:none;">
+    <i class="fas fa-exclamation-triangle" style="font-size:3rem; color:var(--status-red); margin-bottom:1rem; display:block;"></i>
+    <h2 style="color:var(--status-red); font-size:1.5rem; margin-bottom:0.5rem;">403 Forbidden: Access Denied</h2>
+    <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1.5rem;">
+      Your account does not possess Super Admin authorization to access the GODSPEED HQ Control Center.
+    </p>
+    <a href="index.html" class="btn btn-primary">
+      <i class="fas fa-arrow-left"></i> Return to Member Portal
+    </a>
+  </div>
+
+  <!-- ============================================================================
+       PORTAL 2 VIEW 3: SUPER ADMIN CONTROL CENTER WORKSPACE LAYOUT
+       ============================================================================ -->
+  <div id="view-admin-portal" class="godspeed-layout" style="display:none;">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" style="border-right:1px solid rgba(239, 68, 68, 0.3);">
+      <div class="brand-header">
+        <div class="brand-logo" style="background:var(--accent-admin);">
+          <i class="fas fa-shield-alt"></i>
+        </div>
+        <div class="brand-info">
+          <h1 style="background:var(--accent-admin); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">CONTROL CENTER</h1>
+          <span>Super Admin Portal</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Master Oversight</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-link active" data-admin-tab="dashboard">
+              <i class="fas fa-chart-pie"></i>
+              <span>Master Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-admin-tab="members">
+              <i class="fas fa-users-cog"></i>
+              <span>Members Directory</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-admin-tab="offices">
+              <i class="fas fa-building"></i>
+              <span>Offices Management</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Rules & Audit</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-link" data-admin-tab="genealogy">
+              <i class="fas fa-sitemap"></i>
+              <span>Genealogy Closure</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-admin-tab="ranks">
+              <i class="fas fa-award"></i>
+              <span>Ranks & Rules</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-admin-tab="audit">
+              <i class="fas fa-history"></i>
+              <span>Security Audit Logs</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <!-- USER PROFILE CARD IN SIDEBAR -->
+      <div class="user-context-card" style="border-color:rgba(239, 68, 68, 0.3);">
+        <div class="user-avatar-badge" style="background:var(--accent-admin);">SA</div>
+        <div class="user-details" style="flex:1;">
+          <h4 id="admin-user-name">Chief SuperAdmin</h4>
+          <span style="color:var(--status-red);">SUPER ADMIN</span>
+        </div>
+        <button class="btn btn-secondary btn-sm btn-admin-logout" title="Sign Out">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Viewport -->
+    <main class="main-viewport">
+      
+      <!-- Top App Bar -->
+      <header class="app-topbar" style="border-color:rgba(239, 68, 68, 0.3);">
+        <div class="view-heading">
+          <h2>Master Organization Dashboard</h2>
+          <p>Organization-wide KPIs, multi-office comparison, rank distribution, and audit alerts</p>
+        </div>
+
+        <div class="topbar-controls">
+          <a href="index.html" class="btn btn-secondary btn-sm">
+            <i class="fas fa-user-circle"></i> Open Member Portal
+          </a>
+          <button class="btn btn-admin btn-sm btn-admin-logout">
+            <i class="fas fa-sign-out-alt"></i> Sign Out
+          </button>
+        </div>
+      </header>
+
+      <!-- MASTER ADMIN DASHBOARD VIEW -->
+      <section id="tab-admin-master" class="tab-content active">
+        <div id="admin-master-view-container"></div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- JavaScript Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/godspeed-store.js"></script>
+  <script src="js/godspeed-admin-app.js"></script>
+</body>
+</html>

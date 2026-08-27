@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GODSPEED HQ — Permission-Aware Operating Platform</title>
+  <title>GODSPEED HQ — Public & Member Portal</title>
   <meta name="description" content="Unified operating platform for GODSPEED Team combining NeoLife MLM operations, digital freelancing, office administration, and leadership intelligence.">
 
   <!-- Google Fonts & FontAwesome -->
@@ -17,7 +17,153 @@
 </head>
 <body>
 
-  <div class="godspeed-layout">
+  <!-- ============================================================================
+       PORTAL 1: PUBLIC LANDING PAGE (Unauthenticated Entry Point)
+       ============================================================================ -->
+  <div id="view-public-landing" class="public-portal-container" style="display:flex;">
+    <header class="public-navbar">
+      <div class="public-brand">
+        <div class="brand-logo"><i class="fas fa-bolt"></i></div>
+        <div class="brand-info">
+          <h1>GODSPEED HQ</h1>
+          <span>Unified Operating Platform</span>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:1rem;">
+        <button class="btn btn-secondary btn-sm btn-to-login"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+        <button class="btn btn-primary btn-sm btn-to-signup"><i class="fas fa-user-plus"></i> Create Account</button>
+      </div>
+    </header>
+
+    <div class="public-hero">
+      <div class="badge badge-blue" style="margin-bottom:1.25rem;">
+        <i class="fas fa-rocket"></i> GODSPEED Team Operating Platform
+      </div>
+      <h1 class="hero-title">Empowering Network Marketing & Digital Freelancing</h1>
+      <p class="hero-subtitle">
+        GODSPEED HQ is the single operating platform connecting NeoLife rank progression, client freelancing outreach, geofenced GPS attendance, office administration, and leadership development.
+      </p>
+
+      <div style="display:flex; gap:1.25rem; justify-content:center; flex-wrap:wrap; margin-bottom: 3rem;">
+        <button class="btn btn-primary btn-to-signup" style="padding:0.85rem 2rem; font-size:1rem;">
+          <i class="fas fa-user-plus"></i> Create Member Account
+        </button>
+        <button class="btn btn-secondary btn-to-login" style="padding:0.85rem 2rem; font-size:1rem;">
+          <i class="fas fa-sign-in-alt"></i> Member Sign In
+        </button>
+      </div>
+
+      <!-- Feature Highlights -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:1.5rem; width:100%; text-align:left;">
+        <div class="card-panel" style="margin:0;">
+          <h4 style="color:var(--accent-primary); font-size:1rem; margin-bottom:0.5rem;"><i class="fas fa-user-circle"></i> 1. Member Profile</h4>
+          <p style="font-size:0.85rem; color:var(--text-muted);">Unified profile answering personal rank progression, carriage, and performance activity.</p>
+        </div>
+        <div class="card-panel" style="margin:0;">
+          <h4 style="color:var(--status-green); font-size:1rem; margin-bottom:0.5rem;"><i class="fas fa-qrcode"></i> 2. GPS Geofenced Attendance</h4>
+          <p style="font-size:0.85rem; color:var(--text-muted);">Layered verification with permanent office QR scan, facial liveness match, and PostGIS geofence.</p>
+        </div>
+        <div class="card-panel" style="margin:0;">
+          <h4 style="color:var(--accent-secondary); font-size:1rem; margin-bottom:0.5rem;"><i class="fas fa-wallet"></i> 3. 10/20/70 Fund Ledger</h4>
+          <p style="font-size:0.85rem; color:var(--text-muted);">Automated allocation: 10% Office Due, 20% Personal Savings, 70% Business Fund.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       PUBLIC MEMBER SIGN IN VIEW (/login)
+       ============================================================================ -->
+  <div id="view-public-login" class="auth-card-wrapper" style="display:none;">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="brand-logo" style="margin: 0 auto 1rem auto;"><i class="fas fa-bolt"></i></div>
+        <h2>Sign In to GODSPEED HQ</h2>
+        <p>Enter your account credentials to access your member workspace</p>
+      </div>
+
+      <form id="form-public-login">
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" class="form-input" placeholder="alex.j@godspeed.org" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" class="form-input" placeholder="••••••••" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:0.75rem; padding:0.75rem;">
+          <i class="fas fa-sign-in-alt"></i> Sign In
+        </button>
+      </form>
+
+      <div style="text-align:center; margin-top:1.5rem; font-size:0.825rem; color:var(--text-muted);">
+        Don't have a member account? <a href="#" class="btn-to-signup" style="color:var(--accent-primary); font-weight:700;">Create Account</a>
+        <br><br>
+        <a href="#" class="btn-to-landing" style="color:var(--text-dim); text-decoration:none;"><i class="fas fa-arrow-left"></i> Back to Home</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       PUBLIC MEMBER SIGN UP VIEW (/signup)
+       SECURITY ENFORCED: Role is ALWAYS assigned as 'member' server-side
+       ============================================================================ -->
+  <div id="view-public-signup" class="auth-card-wrapper" style="display:none;">
+    <div class="auth-card" style="max-width:480px;">
+      <div class="auth-header">
+        <div class="brand-logo" style="margin: 0 auto 1rem auto;"><i class="fas fa-user-plus"></i></div>
+        <h2>Create GODSPEED HQ Account</h2>
+        <p>Join the GODSPEED Team network marketing & freelancing platform</p>
+      </div>
+
+      <form id="form-public-signup">
+        <div class="form-group">
+          <label for="signup-name">Full Name</label>
+          <input type="text" id="signup-name" class="form-input" placeholder="e.g. Alex Johnson" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-email">Email Address</label>
+          <input type="email" id="signup-email" class="form-input" placeholder="alex.j@godspeed.org" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-phone">Phone Number</label>
+          <input type="tel" id="signup-phone" class="form-input" placeholder="+234 800 000 0000" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-password">Password</label>
+          <input type="password" id="signup-password" class="form-input" placeholder="••••••••" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-sponsor">Sponsor / Invitation Code (Optional)</label>
+          <input type="text" id="signup-sponsor" class="form-input" placeholder="e.g. GSD-003 or sponsor email">
+        </div>
+        <div class="form-group">
+          <label for="signup-office">Primary GODSPEED Office</label>
+          <select id="signup-office" class="form-select" required>
+            <option value="OFF-101">GODSPEED HQ Ikeja</option>
+            <option value="OFF-102">GODSPEED Abuja Hub</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:0.75rem; padding:0.75rem;">
+          <i class="fas fa-check-circle"></i> Create Member Account
+        </button>
+      </form>
+
+      <div style="text-align:center; margin-top:1.5rem; font-size:0.825rem; color:var(--text-muted);">
+        Already have an account? <a href="#" class="btn-to-login" style="color:var(--accent-primary); font-weight:700;">Sign In</a>
+        <br><br>
+        <a href="#" class="btn-to-landing" style="color:var(--text-dim); text-decoration:none;"><i class="fas fa-arrow-left"></i> Back to Home</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================================
+       AUTHENTICATED MEMBER PORTAL WORKSPACE LAYOUT
+       ============================================================================ -->
+  <div id="view-member-portal" class="godspeed-layout" style="display:none;">
     
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
@@ -27,7 +173,7 @@
         </div>
         <div class="brand-info">
           <h1>GODSPEED HQ</h1>
-          <span>Permission Architecture v1.1</span>
+          <span>Member Workspace</span>
         </div>
       </div>
 
@@ -106,20 +252,7 @@
         </ul>
       </div>
 
-      <!-- ADDITIVE SUPER ADMIN NAVIGATION -->
-      <div class="nav-section" id="nav-section-admin" style="display:none;">
-        <div class="nav-section-title">Master Organization</div>
-        <ul class="nav-list">
-          <li>
-            <a href="#" class="nav-link" data-route="/admin/dashboard">
-              <i class="fas fa-shield-alt"></i>
-              <span>Master Organization Dashboard</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-
-      <!-- COMMUNITY & NOTICES -->
+      <!-- COMMS & NOTICES -->
       <div class="nav-section">
         <div class="nav-section-title">Comms & Notices</div>
         <ul class="nav-list">
@@ -140,18 +273,21 @@
 
       <!-- USER PROFILE CARD IN SIDEBAR -->
       <div class="user-context-card">
-        <div class="user-avatar-badge" id="sidebar-user-avatar">SA</div>
-        <div class="user-details">
-          <h4 id="sidebar-user-name">Chief SuperAdmin</h4>
-          <span id="sidebar-user-role">SUPER_ADMIN</span>
+        <div class="user-avatar-badge" id="sidebar-user-avatar">MB</div>
+        <div class="user-details" style="flex:1;">
+          <h4 id="sidebar-user-name">Member Name</h4>
+          <span id="sidebar-user-role">MEMBER</span>
         </div>
+        <button class="btn btn-secondary btn-sm btn-member-logout" title="Sign Out">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
       </div>
     </aside>
 
     <!-- Main Viewport -->
     <main class="main-viewport">
       
-      <!-- Top App Bar with Server-Validated Permission Controls -->
+      <!-- Top App Bar -->
       <header class="app-topbar">
         <div class="view-heading">
           <h2 id="view-title-heading">My Personal Operating Dashboard</h2>
@@ -159,24 +295,21 @@
         </div>
 
         <div class="topbar-controls">
-          <!-- SIMULATED USER LOGIN CONTEXT (FOR DEMO AUTHENTICATION TESTING) -->
+          <!-- SIMULATED USER LOGIN CONTEXT -->
           <div class="user-identity-box">
             <i class="fas fa-user-check"></i>
             <span>Simulate User:</span>
             <select id="user-identity-select" class="user-identity-select">
-              <option value="MEM-001">Super Admin (Chief Admin)</option>
-              <option value="MEM-002">Team Leader (Sarah Miller - Ikeja HQ)</option>
-              <option value="MEM-003">Member w/ Descendants (Michael Brown)</option>
               <option value="MEM-004">Ordinary Member (Alex Johnson)</option>
+              <option value="MEM-003">Member w/ Descendants (Michael Brown)</option>
+              <option value="MEM-002">Team Leader (Sarah Miller - Ikeja HQ)</option>
             </select>
           </div>
 
           <!-- CONTROLLED DASHBOARD SWITCHER HEADER DROPDOWN -->
           <div class="dashboard-switcher-box">
             <i class="fas fa-th-large" style="color:var(--accent-primary)"></i>
-            <select id="dashboard-switcher-select" class="dashboard-switcher-select">
-              <!-- Rendered dynamically by godspeed-app.js based on authorized routes -->
-            </select>
+            <select id="dashboard-switcher-select" class="dashboard-switcher-select"></select>
           </div>
 
           <button class="btn btn-secondary btn-sm" id="btn-open-earning-modal">
@@ -245,26 +378,15 @@
 
       <!-- VIEW 2: UPLINE / ANCESTOR TEAM VIEW (/team) -->
       <section id="view-team-dashboard" class="tab-content">
-        <div id="team-view-container">
-          <!-- Rendered by godspeed-app.js -->
-        </div>
+        <div id="team-view-container"></div>
       </section>
 
       <!-- VIEW 3: TEAM LEADER OFFICE DASHBOARD (/office-dashboard) -->
       <section id="view-office-dashboard" class="tab-content">
-        <div id="office-view-container">
-          <!-- Rendered by godspeed-app.js -->
-        </div>
+        <div id="office-view-container"></div>
       </section>
 
-      <!-- VIEW 4: SUPER ADMIN MASTER DASHBOARD (/admin/dashboard) -->
-      <section id="view-admin-dashboard" class="tab-content">
-        <div id="admin-view-container">
-          <!-- Rendered by godspeed-app.js -->
-        </div>
-      </section>
-
-      <!-- GENERAL TAB PANES (ATTENDANCE, PV, FREELANCE, DUES, HEALTH, CHAT, NOTICE) -->
+      <!-- GENERAL TAB PANES -->
       <section id="view-general-tab" class="tab-content">
         
         <div id="pane-genealogy" class="general-tab-pane" style="display:none;">
@@ -434,21 +556,11 @@
         <h3><i class="fas fa-qrcode" style="color:var(--status-green)"></i> Record Attendance</h3>
         <button class="close-btn" id="btn-close-attendance">&times;</button>
       </div>
-
-      <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">
-        Layered Verification: Permanent Office QR + Facial Liveness Match + High-Accuracy GPS Geofence (ST_DWithin).
-      </div>
-
       <div class="scanner-box">
         <div class="scanner-laser"></div>
         <i class="fas fa-camera" style="font-size:2rem; color:var(--accent-primary); margin-bottom:0.5rem; display:block;"></i>
         <span style="font-size:0.8rem; color:var(--text-muted);">Simulating Permanent Office QR & Facial Liveness...</span>
       </div>
-
-      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--status-green); padding: 0.75rem; border-radius: var(--radius-sm); font-size:0.8rem; margin-bottom: 1.25rem;">
-        <i class="fas fa-map-marker-alt" style="color:var(--status-green)"></i> GPS Coordinates Acquired: <strong>6.60185° N, 3.35152° E</strong> (Distance: 12.4m from Ikeja HQ)
-      </div>
-
       <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-attendance').classList.remove('active')">Cancel</button>
         <button type="button" class="btn btn-primary" id="btn-simulate-attendance-scan">Verify & Save Attendance</button>
@@ -463,25 +575,15 @@
         <h3><i class="fas fa-plus-circle" style="color:var(--status-green)"></i> Record Freelance Earning</h3>
         <button class="close-btn" id="btn-close-earning">&times;</button>
       </div>
-
       <form id="form-add-earning">
         <div style="margin-bottom:1rem;">
           <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">Earning Source / Project</label>
           <input type="text" id="earning-source" placeholder="e.g. Upwork Mobile App Development" required style="width:100%; padding:0.65rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-sm); color:#fff; font-size:0.875rem;">
         </div>
-
         <div style="margin-bottom:1rem;">
           <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">Net Amount Earned (NGN)</label>
           <input type="number" id="earning-amount" placeholder="e.g. 150000" required style="width:100%; padding:0.65rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-sm); color:#fff; font-size:0.875rem;">
         </div>
-
-        <div style="background:rgba(99,102,241,0.1); border:1px solid var(--border-active); padding:0.85rem; border-radius:var(--radius-sm); font-size:0.8rem; margin-bottom:1.25rem;">
-          <strong>Automatic Split Calculation:</strong><br>
-          &bull; 10% Office Due (Auto-logged)<br>
-          &bull; 20% Personal Savings<br>
-          &bull; 70% Business Reinvestment Fund
-        </div>
-
         <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
           <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-earning').classList.remove('active')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Earning & Split</button>

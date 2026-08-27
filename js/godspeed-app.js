@@ -1,34 +1,42 @@
 /**
- * GODSPEED HQ - Main Application UI & Permission Router Controller (PRD v1.1 Architecture)
+ * GODSPEED HQ - PORTAL 1: Public & Member Portal Controller (PRD v1.1 Architecture)
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const store = window.godspeedStore;
 
-  // Active Route State (Default: server-determined post-login route)
-  let currentRoute = '/dashboard';
+  // Active View Route State
+  let currentRoute = '/';
+
+  // Public & Auth Views
+  const viewPublicLanding = document.getElementById('view-public-landing');
+  const viewPublicLogin = document.getElementById('view-public-login');
+  const viewPublicSignup = document.getElementById('view-public-signup');
+
+  // Authenticated Member App Layout
+  const viewMemberPortal = document.getElementById('view-member-portal');
+
+  // Member Sub-Views
+  const viewMemberDashboard = document.getElementById('view-member-dashboard');
+  const viewTeamDashboard = document.getElementById('view-team-dashboard');
+  const viewOfficeDashboard = document.getElementById('view-office-dashboard');
+  const tabGeneralContent = document.getElementById('view-general-tab');
 
   // DOM Handles
   const viewTitle = document.getElementById('view-title-heading');
   const viewSubtitle = document.getElementById('view-title-sub');
-  const userIdentitySelect = document.getElementById('user-identity-select');
   const dashboardSwitcherSelect = document.getElementById('dashboard-switcher-select');
+  const userIdentitySelect = document.getElementById('user-identity-select');
 
   // Sidebar Nav Sections
-  const navListMember = document.getElementById('nav-list-member');
   const navSectionTeam = document.getElementById('nav-section-team');
   const navSectionLeader = document.getElementById('nav-section-leader');
-  const navSectionAdmin = document.getElementById('nav-section-admin');
 
-  // Views
-  const viewMemberDashboard = document.getElementById('view-member-dashboard');
-  const viewTeamDashboard = document.getElementById('view-team-dashboard');
-  const viewOfficeDashboard = document.getElementById('view-office-dashboard');
-  const viewAdminDashboard = document.getElementById('view-admin-dashboard');
+  // Forms
+  const formPublicLogin = document.getElementById('form-public-login');
+  const formPublicSignup = document.getElementById('form-public-signup');
 
-  const tabGeneralContent = document.getElementById('view-general-tab');
-
-  // Modals & Triggers
+  // Modals
   const modalAttendance = document.getElementById('modal-attendance');
   const btnOpenAttendance = document.getElementById('btn-open-attendance-modal');
   const btnCloseAttendance = document.getElementById('btn-close-attendance');
@@ -39,34 +47,102 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCloseEarning = document.getElementById('btn-close-earning');
   const formAddEarning = document.getElementById('form-add-earning');
 
-  /* App Initialization */
+  /* Application Initialization */
   function init() {
-    setupUserIdentitySwitcher();
-    setupDashboardSwitcher();
+    setupPublicAuthEvents();
     setupNavigationListeners();
     setupEventListeners();
+    setupUserIdentitySwitcher();
+    setupDashboardSwitcher();
 
-    // Authenticate & Route to default server route post-login
-    const perms = store.getUserPermissions();
-    routeTo(perms.defaultRoute);
+    // Check existing auth state
+    if (store.isAuthenticated && store.currentUserId) {
+      const perms = store.getUserPermissions();
+      routeTo(perms.defaultRoute);
+    } else {
+      routeTo('/');
+    }
+  }
+
+  /* Public Authentication Listeners */
+  function setupPublicAuthEvents() {
+    // Navigation to Public Sign In / Sign Up
+    document.querySelectorAll('.btn-to-login').forEach(btn => {
+      btn.addEventListener('click', (e) => { e.preventDefault(); routeTo('/login'); });
+    });
+    document.querySelectorAll('.btn-to-signup').forEach(btn => {
+      btn.addEventListener('click', (e) => { e.preventDefault(); routeTo('/signup'); });
+    });
+    document.querySelectorAll('.btn-to-landing').forEach(btn => {
+      btn.addEventListener('click', (e) => { e.preventDefault(); routeTo('/'); });
+    });
+
+    // Public Sign In Form Submit
+    if (formPublicLogin) {
+      formPublicLogin.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+
+        const authRes = store.authenticateUser(email, password);
+        if (authRes.success) {
+          showToast(`Welcome back, ${authRes.member.name}!`);
+          routeTo(authRes.permissions.defaultRoute);
+        } else {
+          alert(authRes.message);
+        }
+      });
+    }
+
+    // Public Sign Up Form Submit (SECURITY ENFORCED: Role is ALWAYS 'member')
+    if (formPublicSignup) {
+      formPublicSignup.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = document.getElementById('signup-name').value;
+        const email = document.getElementById('signup-email').value;
+        const phone = document.getElementById('signup-phone').value;
+        const password = document.getElementById('signup-password').value;
+        const sponsor = document.getElementById('signup-sponsor').value;
+        const office = document.getElementById('signup-office').value;
+
+        const regRes = store.registerMember(name, email, phone, password, sponsor, office);
+        if (regRes.success) {
+          // Auto login new member
+          store.authenticateUser(email, password);
+          showToast(`Account created! Welcome to GODSPEED HQ, ${name}.`);
+          routeTo('/dashboard');
+        } else {
+          alert(regRes.message);
+        }
+      });
+    }
+
+    // Logout button
+    document.querySelectorAll('.btn-member-logout').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        store.logout();
+        showToast('Logged out successfully.');
+        routeTo('/');
+      });
+    });
   }
 
   /* User Identity Switcher (Simulating Login as Different Users) */
   function setupUserIdentitySwitcher() {
     if (!userIdentitySelect) return;
-    userIdentitySelect.value = store.currentUserId;
+    if (store.currentUserId) userIdentitySelect.value = store.currentUserId;
 
     userIdentitySelect.addEventListener('change', (e) => {
       const newUserId = e.target.value;
       store.setCurrentUser(newUserId);
+      store.isAuthenticated = true;
 
       const perms = store.getUserPermissions(newUserId);
-      showToast(`Logged in as: ${perms.member.name} (${perms.role.toUpperCase()})`);
+      showToast(`Switched login context to: ${perms.member.name} (${perms.role.toUpperCase()})`);
 
       updateSidebarNavigation();
       updateDashboardSwitcher();
-      
-      // Auto-route to user's authorized post-login route
       routeTo(perms.defaultRoute);
     });
   }
@@ -96,21 +172,19 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateSidebarNavigation() {
     const perms = store.getUserPermissions();
 
-    // Update User Profile Card in Sidebar
     const userAvatar = document.getElementById('sidebar-user-avatar');
     const userName = document.getElementById('sidebar-user-name');
     const userRole = document.getElementById('sidebar-user-role');
 
-    if (userAvatar) userAvatar.innerText = perms.member.name.split(' ').map(n=>n[0]).join('');
-    if (userName) userName.innerText = perms.member.name;
-    if (userRole) userRole.innerText = `${perms.role.toUpperCase()} • ${formatRank(perms.member.rank)}`;
+    if (perms.member) {
+      if (userAvatar) userAvatar.innerText = perms.member.name.split(' ').map(n=>n[0]).join('');
+      if (userName) userName.innerText = perms.member.name;
+      if (userRole) userRole.innerText = `${perms.role.toUpperCase()} • ${formatRank(perms.member.rank)}`;
+    }
 
-    // Show/Hide Navigation Sections Based on Effective Server Permissions
     if (navSectionTeam) navSectionTeam.style.display = perms.canAccessTeam ? 'block' : 'none';
     if (navSectionLeader) navSectionLeader.style.display = perms.canAccessOffice ? 'block' : 'none';
-    if (navSectionAdmin) navSectionAdmin.style.display = perms.canAccessAdmin ? 'block' : 'none';
 
-    // Highlight Active Link
     document.querySelectorAll('.nav-link').forEach(link => {
       const linkRoute = link.getAttribute('data-route') || link.getAttribute('data-tab');
       if (linkRoute === currentRoute || link.getAttribute('data-tab') === currentRoute.replace('/', '')) {
@@ -121,7 +195,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* Navigation Click Listeners */
   function setupNavigationListeners() {
     document.querySelectorAll('.nav-link').forEach(link => {
       link.addEventListener('click', (e) => {
@@ -132,11 +205,32 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* Permission Boundary Router with Server-Validated Access Control */
+  /* Permission Boundary Router */
   function routeTo(targetRoute) {
+    // Unauthenticated Public Routes
+    if (!store.isAuthenticated) {
+      if (targetRoute !== '/' && targetRoute !== '/login' && targetRoute !== '/signup') {
+        targetRoute = '/';
+      }
+
+      if (viewMemberPortal) viewMemberPortal.style.display = 'none';
+      if (viewPublicLanding) viewPublicLanding.style.display = targetRoute === '/' ? 'flex' : 'none';
+      if (viewPublicLogin) viewPublicLogin.style.display = targetRoute === '/login' ? 'flex' : 'none';
+      if (viewPublicSignup) viewPublicSignup.style.display = targetRoute === '/signup' ? 'flex' : 'none';
+
+      currentRoute = targetRoute;
+      return;
+    }
+
+    // Authenticated Routes
+    if (viewPublicLanding) viewPublicLanding.style.display = 'none';
+    if (viewPublicLogin) viewPublicLogin.style.display = 'none';
+    if (viewPublicSignup) viewPublicSignup.style.display = 'none';
+    if (viewMemberPortal) viewMemberPortal.style.display = 'flex';
+
     const perms = store.getUserPermissions();
 
-    // Validate Security Access Boundary
+    // Security Boundary Check
     if (!store.canAccessRoute(store.currentUserId, targetRoute)) {
       showToast(`Security Boundary Blocked: Access to ${targetRoute} requires higher permissions.`);
       currentRoute = perms.defaultRoute;
@@ -144,14 +238,12 @@ document.addEventListener('DOMContentLoaded', () => {
       currentRoute = targetRoute;
     }
 
-    // Hide all view containers
+    // Hide Sub Views
     if (viewMemberDashboard) viewMemberDashboard.style.display = 'none';
     if (viewTeamDashboard) viewTeamDashboard.style.display = 'none';
     if (viewOfficeDashboard) viewOfficeDashboard.style.display = 'none';
-    if (viewAdminDashboard) viewAdminDashboard.style.display = 'none';
     if (tabGeneralContent) tabGeneralContent.style.display = 'none';
 
-    // Route to Target View
     if (currentRoute === '/dashboard') {
       if (viewMemberDashboard) viewMemberDashboard.style.display = 'block';
       if (viewTitle) viewTitle.innerText = 'My Personal Operating Dashboard';
@@ -167,13 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (viewTitle) viewTitle.innerText = 'Office Management Dashboard';
       if (viewSubtitle) viewSubtitle.innerText = 'Office member roster, attendance tracking, dues arrears, and carriage queue';
       renderOfficeDashboard();
-    } else if (currentRoute === '/admin/dashboard') {
-      if (viewAdminDashboard) viewAdminDashboard.style.display = 'block';
-      if (viewTitle) viewTitle.innerText = 'Master Organization Dashboard';
-      if (viewSubtitle) viewSubtitle.innerText = 'Organization-wide KPIs, rank distribution, multi-office metrics, and audit logs';
-      renderSuperAdminDashboard();
     } else {
-      // General Content Views (Attendance, PV, Freelance, Health, Dues, Chat, Notice)
       if (tabGeneralContent) tabGeneralContent.style.display = 'block';
       renderGeneralTab(currentRoute.replace('/', ''));
     }
@@ -185,18 +271,15 @@ document.addEventListener('DOMContentLoaded', () => {
   /* RENDER 1: MEMBER PERSONAL DASHBOARD (/dashboard) */
   function renderMemberDashboard() {
     const member = store.getCurrentUser();
+    if (!member) return;
     const qpv = store.calculateQPVBaseline(member.id);
 
-    // Personal PV & Submissions
     const personalPVs = store.pvSubmissions.filter(p => p.memberId === member.id && p.status === 'approved');
     const myApprovedPV = personalPVs.reduce((sum, p) => sum + Number(p.pvAmount), 0);
 
-    // Personal Earnings & 10/20/70 Breakdown
     const myEarnings = store.earningsLedger.filter(e => e.memberId === member.id);
     const myNetEarnings = myEarnings.reduce((sum, e) => sum + Number(e.net), 0);
-    const myPersonalSavings = myEarnings.reduce((sum, e) => sum + Number(e.personal20), 0);
 
-    // DOM Updates for Member Dashboard
     const elemName = document.getElementById('member-dash-name');
     const elemRank = document.getElementById('member-dash-rank');
     const elemPv = document.getElementById('member-dash-pv');
@@ -345,68 +428,6 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
-  /* RENDER 4: SUPER ADMIN MASTER DASHBOARD (/admin/dashboard) */
-  function renderSuperAdminDashboard() {
-    const container = document.getElementById('admin-view-container');
-    if (!container) return;
-
-    const totalMembers = store.members.length;
-    const totalOffices = store.offices.length;
-    const totalApprovedPV = store.pvSubmissions.filter(p => p.status === 'approved').reduce((sum, p) => sum + Number(p.pvAmount), 0);
-
-    container.innerHTML = `
-      <div class="metrics-row">
-        <div class="metric-box">
-          <div class="metric-title"><span>Total Organization Members</span><i class="fas fa-globe"></i></div>
-          <div class="metric-number">${totalMembers}</div>
-          <div class="metric-sub">GODSPEED Team Global</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-title"><span>Active Offices</span><i class="fas fa-building"></i></div>
-          <div class="metric-number" style="color:var(--status-blue)">${totalOffices}</div>
-          <div class="metric-sub">Ikeja HQ & Abuja Hub</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-title"><span>Org Approved PPV</span><i class="fas fa-box"></i></div>
-          <div class="metric-number" style="color:var(--accent-secondary)">${totalApprovedPV.toLocaleString()} PV</div>
-          <div class="metric-sub">Period: 2026-08</div>
-        </div>
-      </div>
-
-      <div class="card-panel">
-        <div class="panel-head"><h3><i class="fas fa-shield-alt"></i> Office Performance Comparison</h3></div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Office Code</th>
-                <th>Office Name</th>
-                <th>Team Leader</th>
-                <th>Geofence Radius</th>
-                <th>Active Members</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${store.offices.map(o => {
-                const leader = store.members.find(m => m.id === o.teamLeaderId) || { name: 'Unassigned' };
-                const count = store.members.filter(m => m.officeId === o.id).length;
-                return `
-                  <tr>
-                    <td><strong>${o.code}</strong></td>
-                    <td>${escapeHTML(o.name)}</td>
-                    <td>${escapeHTML(leader.name)}</td>
-                    <td>${o.radiusMeters} meters</td>
-                    <td><span class="badge badge-blue">${count} members</span></td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
   /* RENDER GENERAL TAB VIEWS */
   function renderGeneralTab(tabName) {
     document.querySelectorAll('.general-tab-pane').forEach(p => p.style.display = 'none');
@@ -436,6 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSimulateScan) {
       btnSimulateScan.addEventListener('click', () => {
         const member = store.getCurrentUser();
+        if (!member) return;
         const res = store.recordAttendance(member.id, member.officeId || 'OFF-101', 6.60185, 3.35152, true);
         if (res.success) {
           modalAttendance.classList.remove('active');
@@ -457,7 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const gross = document.getElementById('earning-amount').value;
         const member = store.getCurrentUser();
 
-        if (source && gross) {
+        if (source && gross && member) {
           store.addFreelanceEarning(member.id, source, gross);
           formAddEarning.reset();
           modalEarning.classList.remove('active');

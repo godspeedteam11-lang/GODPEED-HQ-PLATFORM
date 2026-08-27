@@ -1,14 +1,15 @@
 /**
  * GODSPEED HQ - Core Data Store & State Engine (PRD v1.1 Baseline)
- * Includes Server-Validated Dashboard Permissions & Role-Aware Routing Logic
+ * Supports Two-Portal Architecture (Member Portal & Super Admin Control Center)
  */
 
 class GodspeedStore {
   constructor() {
     this.STORAGE_KEY = 'godspeed_hq_state_v1.1';
     
-    // Active Authenticated User Context
-    this.currentUserId = 'MEM-001'; // Default: Super Admin (Simulated Login)
+    // Active Authenticated Session
+    this.currentUserId = null; // null = unauthenticated visitor
+    this.isAuthenticated = false;
     
     // Core State Collections
     this.offices = [];
@@ -40,7 +41,10 @@ class GodspeedStore {
         this.healthScores = parsed.healthScores || [];
         this.chatMessages = parsed.chatMessages || [];
         this.noticeBoard = parsed.noticeBoard || [];
-        if (parsed.currentUserId) this.currentUserId = parsed.currentUserId;
+        if (parsed.currentUserId) {
+          this.currentUserId = parsed.currentUserId;
+          this.isAuthenticated = parsed.isAuthenticated || false;
+        }
       } catch (e) {
         this.seedInitialData();
       }
@@ -59,14 +63,15 @@ class GodspeedStore {
     ];
 
     // 2. Members (Sponsor Genealogy Hierarchy)
+    // Master Super Admin Owner Account: MEM-001 (admin@godspeed.org / password)
     this.members = [
-      { id: 'MEM-001', code: 'GSD-001', name: 'Chief SuperAdmin', role: 'super_admin', rank: 'president_team', officeId: 'OFF-101', sponsorId: null, email: 'admin@godspeed.org' },
-      { id: 'MEM-002', code: 'GSD-002', name: 'Leader Sarah Miller', role: 'team_leader', rank: 'director', officeId: 'OFF-101', sponsorId: 'MEM-001', email: 'sarah.m@godspeed.org' },
-      { id: 'MEM-003', code: 'GSD-003', name: 'Upline Michael Brown', role: 'member', rank: 'emerald_director', officeId: 'OFF-101', sponsorId: 'MEM-002', email: 'michael.b@godspeed.org' },
-      { id: 'MEM-004', code: 'GSD-004', name: 'Alex Johnson', role: 'member', rank: 'senior_manager', officeId: 'OFF-101', sponsorId: 'MEM-003', email: 'alex.j@godspeed.org' },
-      { id: 'MEM-005', code: 'GSD-005', name: 'Emily Davis', role: 'team_leader', rank: 'executive_manager', officeId: 'OFF-102', sponsorId: 'MEM-003', email: 'emily.d@godspeed.org' },
-      { id: 'MEM-006', code: 'GSD-006', name: 'David Chen', role: 'member', rank: 'full_distributor', officeId: 'OFF-101', sponsorId: 'MEM-004', email: 'david.c@godspeed.org' },
-      { id: 'MEM-007', code: 'GSD-007', name: 'Sophia Martinez', role: 'member', rank: 'newbie', officeId: 'OFF-101', sponsorId: 'MEM-004', email: 'sophia.m@godspeed.org' }
+      { id: 'MEM-001', code: 'GSD-001', name: 'Chief SuperAdmin', role: 'super_admin', rank: 'president_team', officeId: 'OFF-101', sponsorId: null, email: 'admin@godspeed.org', phone: '+2348000000001', password: 'password123' },
+      { id: 'MEM-002', code: 'GSD-002', name: 'Leader Sarah Miller', role: 'team_leader', rank: 'director', officeId: 'OFF-101', sponsorId: 'MEM-001', email: 'sarah.m@godspeed.org', phone: '+2348000000002', password: 'password123' },
+      { id: 'MEM-003', code: 'GSD-003', name: 'Upline Michael Brown', role: 'member', rank: 'emerald_director', officeId: 'OFF-101', sponsorId: 'MEM-002', email: 'michael.b@godspeed.org', phone: '+2348000000003', password: 'password123' },
+      { id: 'MEM-004', code: 'GSD-004', name: 'Alex Johnson', role: 'member', rank: 'senior_manager', officeId: 'OFF-101', sponsorId: 'MEM-003', email: 'alex.j@godspeed.org', phone: '+2348000000004', password: 'password123' },
+      { id: 'MEM-005', code: 'GSD-005', name: 'Emily Davis', role: 'team_leader', rank: 'executive_manager', officeId: 'OFF-102', sponsorId: 'MEM-003', email: 'emily.d@godspeed.org', phone: '+2348000000005', password: 'password123' },
+      { id: 'MEM-006', code: 'GSD-006', name: 'David Chen', role: 'member', rank: 'full_distributor', officeId: 'OFF-101', sponsorId: 'MEM-004', email: 'david.c@godspeed.org', phone: '+2348000000006', password: 'password123' },
+      { id: 'MEM-007', code: 'GSD-007', name: 'Sophia Martinez', role: 'member', rank: 'newbie', officeId: 'OFF-101', sponsorId: 'MEM-004', email: 'sophia.m@godspeed.org', phone: '+2348000000007', password: 'password123' }
     ];
 
     // 3. Attendance Logs
@@ -115,6 +120,7 @@ class GodspeedStore {
   save() {
     const payload = {
       currentUserId: this.currentUserId,
+      isAuthenticated: this.isAuthenticated,
       offices: this.offices,
       members: this.members,
       attendanceLogs: this.attendanceLogs,
@@ -129,21 +135,105 @@ class GodspeedStore {
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(payload));
   }
 
-  /* Current Active User Helper */
-  getCurrentUser() {
-    return this.members.find(m => m.id === this.currentUserId) || this.members[0];
+  /* Public Member Signup (SECURITY RULE: Always assigns role = 'member') */
+  registerMember(fullName, email, phone, password, sponsorCode = null, officeId = 'OFF-101') {
+    const existing = this.members.find(m => m.email.toLowerCase() === email.toLowerCase());
+    if (existing) {
+      return { success: false, message: 'An account with this email address already exists.' };
+    }
+
+    // Resolve sponsor if provided
+    let sponsorId = 'MEM-001';
+    if (sponsorCode) {
+      const foundSponsor = this.members.find(m => m.code.toLowerCase() === sponsorCode.toLowerCase() || m.id === sponsorCode);
+      if (foundSponsor) sponsorId = foundSponsor.id;
+    }
+
+    const newId = 'MEM-' + String(this.members.length + 1).padStart(3, '0');
+    const newCode = 'GSD-' + String(this.members.length + 1).padStart(3, '0');
+
+    const newMember = {
+      id: newId,
+      code: newCode,
+      name: fullName,
+      email: email.toLowerCase(),
+      phone,
+      password: password || 'password123',
+      role: 'member', // SECURITY ENFORCED: Public signup can NEVER select admin/leader role
+      rank: 'newbie',
+      officeId: officeId || 'OFF-101',
+      sponsorId
+    };
+
+    this.members.push(newMember);
+
+    // Initial Health Score entry
+    this.healthScores.push({
+      memberId: newId,
+      healthStatus: 'green',
+      attendanceRate: 100,
+      mtdPV: 0,
+      dueArrears: 0,
+      signals: ['New Onboarding Member']
+    });
+
+    this.save();
+    return { success: true, member: newMember, message: 'Account created successfully! Welcome to GODSPEED HQ.' };
   }
 
-  setCurrentUser(memberId) {
-    this.currentUserId = memberId;
+  /* Authenticate User Sign In */
+  authenticateUser(email, password) {
+    const member = this.members.find(m => m.email.toLowerCase() === email.toLowerCase());
+    if (!member) {
+      return { success: false, message: 'Invalid credentials. User account not found.' };
+    }
+
+    // Basic password check (default password fallback for demo)
+    if (password && member.password && password !== member.password && password !== 'password123') {
+      return { success: false, message: 'Invalid email or password.' };
+    }
+
+    this.currentUserId = member.id;
+    this.isAuthenticated = true;
     this.save();
+
+    const perms = this.getUserPermissions(member.id);
+    return { success: true, member, permissions: perms };
+  }
+
+  /* Authenticate Super Admin Control Center Sign In */
+  authenticateAdmin(email, password) {
+    const authResult = this.authenticateUser(email, password);
+    if (!authResult.success) return authResult;
+
+    const perms = authResult.permissions;
+    if (!perms.isSuperAdmin) {
+      this.logout();
+      return { 
+        success: false, 
+        message: '403 Forbidden: Account lacks Super Admin permissions to access Control Center.' 
+      };
+    }
+
+    return authResult;
+  }
+
+  logout() {
+    this.currentUserId = null;
+    this.isAuthenticated = false;
+    this.save();
+  }
+
+  getCurrentUser() {
+    if (!this.currentUserId) return null;
+    return this.members.find(m => m.id === this.currentUserId) || null;
   }
 
   /* Server-Side & Role-Aware Permissions Evaluator */
   getUserPermissions(memberId = this.currentUserId) {
     const member = this.members.find(m => m.id === memberId);
     if (!member) {
-      return { role: 'member', canAccessPersonal: true, canAccessTeam: false, canAccessOffice: false, canAccessAdmin: false, defaultRoute: '/dashboard' };
+      return { role: 'visitor', canAccessPersonal: false, canAccessTeam: false, canAccessOffice: false, canAccessAdmin: false, defaultRoute: '/' };
     }
 
     const isSuperAdmin = member.role === 'super_admin' || member.role === 'admin';
@@ -151,7 +241,7 @@ class GodspeedStore {
     const descendants = this.getDescendantIds(member.id);
     const hasDescendants = descendants.length > 0;
 
-    const canAccessPersonal = true; // Every member has personal dashboard
+    const canAccessPersonal = true;
     const canAccessTeam = isSuperAdmin || hasDescendants;
     const canAccessOffice = isSuperAdmin || isTeamLeader;
     const canAccessAdmin = isSuperAdmin;
@@ -177,6 +267,8 @@ class GodspeedStore {
 
   /* Security Boundary Enforcement */
   canAccessRoute(memberId = this.currentUserId, route) {
+    if (!memberId) return route === '/' || route === '/login' || route === '/signup';
+
     const perms = this.getUserPermissions(memberId);
 
     if (route === '/dashboard') return perms.canAccessPersonal;
@@ -184,7 +276,6 @@ class GodspeedStore {
     if (route === '/office-dashboard') return perms.canAccessOffice;
     if (route === '/admin/dashboard') return perms.canAccessAdmin;
 
-    // Default permission for general content tabs (attendance, pv, learning, etc.)
     return true;
   }
 
@@ -209,7 +300,7 @@ class GodspeedStore {
     return options;
   }
 
-  /* Geospatial Geofence Verification (ST_DWithin Emulation) */
+  /* Geospatial Geofence Verification */
   verifyAttendanceGeofence(officeId, userLat, userLng) {
     const office = this.offices.find(o => o.id === officeId);
     if (!office) return { valid: false, message: 'Office not found' };
