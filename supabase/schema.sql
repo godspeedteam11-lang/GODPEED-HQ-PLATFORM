@@ -1,22 +1,40 @@
 -- ============================================================================
 -- GODSPEED HQ | Database Schema & Row-Level Security (RLS) Policies (PRD v1.1)
 -- Target Platform: Supabase PostgreSQL + PostGIS Extension
+-- Fully Idempotent (Safe to run multiple times)
 -- ============================================================================
 
 -- 1. Enable Required Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis";
 
--- 2. ENUMS & DOMAINS
-CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'team_leader', 'trainer', 'finance_officer', 'member');
-CREATE TYPE neolife_rank AS ENUM ('newbie', 'pro', 'full_distributor', 'manager', 'senior_manager', 'executive_manager', 'director', 'emerald_director', 'world_team', 'president_team');
-CREATE TYPE attendance_status AS ENUM ('success', 'flagged', 'manual_override', 'rejected');
-CREATE TYPE carriage_status AS ENUM ('pv_submitted', 'ready_for_pickup', 'carriage_uploaded', 'under_review', 'approved', 'declined');
-CREATE TYPE dues_status AS ENUM ('pending', 'partially_paid', 'paid', 'overdue', 'waived', 'cancelled', 'disputed');
-CREATE TYPE health_state AS ENUM ('green', 'amber', 'red');
+-- 2. ENUMS & DOMAINS (Idempotent Creation)
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'team_leader', 'trainer', 'finance_officer', 'member');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE neolife_rank AS ENUM ('newbie', 'pro', 'full_distributor', 'manager', 'senior_manager', 'executive_manager', 'director', 'emerald_director', 'world_team', 'president_team');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE attendance_status AS ENUM ('success', 'flagged', 'manual_override', 'rejected');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE carriage_status AS ENUM ('pv_submitted', 'ready_for_pickup', 'carriage_uploaded', 'under_review', 'approved', 'declined');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE dues_status AS ENUM ('pending', 'partially_paid', 'paid', 'overdue', 'waived', 'cancelled', 'disputed');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE health_state AS ENUM ('green', 'amber', 'red');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 3. OFFICES TABLE
-CREATE TABLE offices (
+CREATE TABLE IF NOT EXISTS offices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     code VARCHAR(20) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
@@ -31,7 +49,7 @@ CREATE TABLE offices (
 );
 
 -- 4. MEMBERS TABLE
-CREATE TABLE members (
+CREATE TABLE IF NOT EXISTS members (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     member_code VARCHAR(20) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
@@ -51,10 +69,12 @@ CREATE TABLE members (
 );
 
 -- Foreign key constraint for offices.team_leader_id
-ALTER TABLE offices ADD CONSTRAINT fk_offices_team_leader FOREIGN KEY (team_leader_id) REFERENCES members(id) ON DELETE SET NULL;
+DO $$ BEGIN
+    ALTER TABLE offices ADD CONSTRAINT fk_offices_team_leader FOREIGN KEY (team_leader_id) REFERENCES members(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 5. GENEALOGY CLOSURE TABLE (Instantaneous Subtree Lookup)
-CREATE TABLE genealogy_closure (
+CREATE TABLE IF NOT EXISTS genealogy_closure (
     ancestor_id UUID REFERENCES members(id) ON DELETE CASCADE,
     descendant_id UUID REFERENCES members(id) ON DELETE CASCADE,
     depth INT NOT NULL,
@@ -62,7 +82,7 @@ CREATE TABLE genealogy_closure (
 );
 
 -- 6. ATTENDANCE LOGS TABLE
-CREATE TABLE attendance_logs (
+CREATE TABLE IF NOT EXISTS attendance_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
     office_id UUID NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
@@ -80,7 +100,7 @@ CREATE TABLE attendance_logs (
 );
 
 -- 7. OFFICE DUES TABLE
-CREATE TABLE office_dues (
+CREATE TABLE IF NOT EXISTS office_dues (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     office_id UUID NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
     member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
@@ -96,7 +116,7 @@ CREATE TABLE office_dues (
 );
 
 -- 8. NEOLIFE PV & CARRIAGE TABLE
-CREATE TABLE pv_submissions (
+CREATE TABLE IF NOT EXISTS pv_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
     sales_period VARCHAR(7) NOT NULL, -- Format: YYYY-MM
@@ -112,7 +132,7 @@ CREATE TABLE pv_submissions (
 );
 
 -- 9. EARNINGS LEDGER & 10/20/70 SPLIT TABLE
-CREATE TABLE earnings_ledger (
+CREATE TABLE IF NOT EXISTS earnings_ledger (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
     source VARCHAR(50) NOT NULL, -- 'neolife', 'freelancing', 'referral', 'consulting'
@@ -129,7 +149,7 @@ CREATE TABLE earnings_ledger (
 );
 
 -- 10. MEMBER HEALTH & INTERVENTION TABLE
-CREATE TABLE health_scores (
+CREATE TABLE IF NOT EXISTS health_scores (
     member_id UUID PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
     health_status health_state DEFAULT 'green',
     warning_signals JSONB DEFAULT '[]'::jsonb,
@@ -140,7 +160,7 @@ CREATE TABLE health_scores (
 );
 
 -- 11. HIERARCHICAL CHAT MESSAGES TABLE
-CREATE TABLE chat_messages (
+CREATE TABLE IF NOT EXISTS chat_messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     sender_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
     recipient_id UUID REFERENCES members(id) ON DELETE CASCADE, -- Null for group/office chat
@@ -187,6 +207,12 @@ ALTER TABLE members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE earnings_ledger ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+
+-- Drop Policies if Exists to allow seamless re-execution
+DROP POLICY IF EXISTS "Super Admins access all members" ON members;
+DROP POLICY IF EXISTS "Team Leaders view office members" ON members;
+DROP POLICY IF EXISTS "Ancestors view descendant subtree members" ON members;
+DROP POLICY IF EXISTS "Chat view permissions for participants, uplines, and team leaders" ON chat_messages;
 
 -- Member self-access & Ancestor subtree access for Members table
 CREATE POLICY "Super Admins access all members" ON members
