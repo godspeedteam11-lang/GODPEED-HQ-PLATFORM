@@ -174,6 +174,60 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 
 -- ============================================================================
+-- SERVER-SIDE DASHBOARD ROUTE PERMISSION ENGINE (RPC)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION get_user_dashboard_permissions(p_user_id UUID)
+RETURNS JSONB AS $$
+DECLARE
+    v_role user_role;
+    v_office_id UUID;
+    v_is_team_leader BOOLEAN := FALSE;
+    v_has_descendants BOOLEAN := FALSE;
+    v_can_access_admin BOOLEAN := FALSE;
+    v_can_access_office BOOLEAN := FALSE;
+    v_can_access_team BOOLEAN := FALSE;
+    v_default_route TEXT := '/dashboard';
+BEGIN
+    SELECT role, primary_office_id INTO v_role, v_office_id
+    FROM members WHERE id = p_user_id;
+
+    -- Check if user is Team Leader of their office or assigned as team leader
+    SELECT EXISTS (
+        SELECT 1 FROM offices WHERE team_leader_id = p_user_id
+    ) INTO v_is_team_leader;
+
+    -- Check if user has descendants in genealogy tree
+    SELECT EXISTS (
+        SELECT 1 FROM genealogy_closure WHERE ancestor_id = p_user_id AND depth > 0
+    ) INTO v_has_descendants;
+
+    IF v_role IN ('super_admin', 'admin') THEN
+        v_can_access_admin := TRUE;
+        v_can_access_office := TRUE;
+        v_can_access_team := TRUE;
+        v_default_route := '/admin/dashboard';
+    ELSIF v_role = 'team_leader' OR v_is_team_leader THEN
+        v_can_access_office := TRUE;
+        v_can_access_team := v_has_descendants;
+        v_default_route := '/office-dashboard';
+    ELSE
+        v_can_access_team := v_has_descendants;
+        v_default_route := '/dashboard';
+    END IF;
+
+    RETURN jsonb_build_object(
+        'role', v_role,
+        'can_access_personal', TRUE,
+        'can_access_team', v_can_access_team,
+        'can_access_office', v_can_access_office,
+        'can_access_admin', v_can_access_admin,
+        'default_route', v_default_route
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================================
 -- HELPER FUNCTIONS & GEOSPATIAL VALIDATION
 -- ============================================================================
 

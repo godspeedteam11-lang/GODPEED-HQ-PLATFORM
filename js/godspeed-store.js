@@ -1,13 +1,16 @@
 /**
  * GODSPEED HQ - Core Data Store & State Engine (PRD v1.1 Baseline)
+ * Includes Server-Validated Dashboard Permissions & Role-Aware Routing Logic
  */
 
 class GodspeedStore {
   constructor() {
     this.STORAGE_KEY = 'godspeed_hq_state_v1.1';
     
+    // Active Authenticated User Context
+    this.currentUserId = 'MEM-001'; // Default: Super Admin (Simulated Login)
+    
     // Core State Collections
-    this.currentRole = 'super_admin'; // Active preview role
     this.offices = [];
     this.members = [];
     this.attendanceLogs = [];
@@ -37,6 +40,7 @@ class GodspeedStore {
         this.healthScores = parsed.healthScores || [];
         this.chatMessages = parsed.chatMessages || [];
         this.noticeBoard = parsed.noticeBoard || [];
+        if (parsed.currentUserId) this.currentUserId = parsed.currentUserId;
       } catch (e) {
         this.seedInitialData();
       }
@@ -110,6 +114,7 @@ class GodspeedStore {
 
   save() {
     const payload = {
+      currentUserId: this.currentUserId,
       offices: this.offices,
       members: this.members,
       attendanceLogs: this.attendanceLogs,
@@ -124,12 +129,91 @@ class GodspeedStore {
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(payload));
   }
 
+  /* Current Active User Helper */
+  getCurrentUser() {
+    return this.members.find(m => m.id === this.currentUserId) || this.members[0];
+  }
+
+  setCurrentUser(memberId) {
+    this.currentUserId = memberId;
+    this.save();
+  }
+
+  /* Server-Side & Role-Aware Permissions Evaluator */
+  getUserPermissions(memberId = this.currentUserId) {
+    const member = this.members.find(m => m.id === memberId);
+    if (!member) {
+      return { role: 'member', canAccessPersonal: true, canAccessTeam: false, canAccessOffice: false, canAccessAdmin: false, defaultRoute: '/dashboard' };
+    }
+
+    const isSuperAdmin = member.role === 'super_admin' || member.role === 'admin';
+    const isTeamLeader = member.role === 'team_leader' || this.offices.some(o => o.teamLeaderId === member.id);
+    const descendants = this.getDescendantIds(member.id);
+    const hasDescendants = descendants.length > 0;
+
+    const canAccessPersonal = true; // Every member has personal dashboard
+    const canAccessTeam = isSuperAdmin || hasDescendants;
+    const canAccessOffice = isSuperAdmin || isTeamLeader;
+    const canAccessAdmin = isSuperAdmin;
+
+    let defaultRoute = '/dashboard';
+    if (isSuperAdmin) defaultRoute = '/admin/dashboard';
+    else if (isTeamLeader) defaultRoute = '/office-dashboard';
+    else defaultRoute = '/dashboard';
+
+    return {
+      member,
+      role: member.role,
+      hasDescendants,
+      isTeamLeader,
+      isSuperAdmin,
+      canAccessPersonal,
+      canAccessTeam,
+      canAccessOffice,
+      canAccessAdmin,
+      defaultRoute
+    };
+  }
+
+  /* Security Boundary Enforcement */
+  canAccessRoute(memberId = this.currentUserId, route) {
+    const perms = this.getUserPermissions(memberId);
+
+    if (route === '/dashboard') return perms.canAccessPersonal;
+    if (route === '/team') return perms.canAccessTeam;
+    if (route === '/office-dashboard') return perms.canAccessOffice;
+    if (route === '/admin/dashboard') return perms.canAccessAdmin;
+
+    // Default permission for general content tabs (attendance, pv, learning, etc.)
+    return true;
+  }
+
+  /* Dashboard Switcher Options */
+  getAuthorizedSwitcherOptions(memberId = this.currentUserId) {
+    const perms = this.getUserPermissions(memberId);
+    const options = [];
+
+    if (perms.canAccessPersonal) {
+      options.push({ id: 'personal', label: 'My Personal Dashboard', route: '/dashboard' });
+    }
+    if (perms.canAccessTeam) {
+      options.push({ id: 'team', label: 'My Team (Genealogy Subtree)', route: '/team' });
+    }
+    if (perms.canAccessOffice) {
+      options.push({ id: 'office', label: 'My Office Dashboard', route: '/office-dashboard' });
+    }
+    if (perms.canAccessAdmin) {
+      options.push({ id: 'admin', label: 'Master Organization Dashboard', route: '/admin/dashboard' });
+    }
+
+    return options;
+  }
+
   /* Geospatial Geofence Verification (ST_DWithin Emulation) */
   verifyAttendanceGeofence(officeId, userLat, userLng) {
     const office = this.offices.find(o => o.id === officeId);
     if (!office) return { valid: false, message: 'Office not found' };
 
-    // Haversine formula distance in meters
     const R = 6371e3;
     const φ1 = office.latitude * Math.PI / 180;
     const φ2 = userLat * Math.PI / 180;
@@ -155,7 +239,6 @@ class GodspeedStore {
     const today = new Date().toISOString().split('T')[0];
     const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // 24-hour duplicate check
     const existing = this.attendanceLogs.find(l => l.memberId === memberId && l.date === today);
     if (existing) {
       return { success: false, message: 'Duplicate Check Failed: Attendance already recorded today within 24h.' };
@@ -204,8 +287,6 @@ class GodspeedStore {
 
     this.earningsLedger.unshift(entry);
 
-    // Automatically create expected 10% Office Due entry (PRD Section 16.2)
-    const member = this.members.find(m => m.id === memberId);
     this.officeDues.unshift({
       id: 'DUE-' + Date.now(),
       memberId,
@@ -220,7 +301,6 @@ class GodspeedStore {
     return entry;
   }
 
-  /* NeoLife PV State Transition */
   updatePVStatus(pvId, newStatus, reason = '') {
     const pv = this.pvSubmissions.find(p => p.id === pvId);
     if (pv) {
@@ -230,7 +310,6 @@ class GodspeedStore {
     }
   }
 
-  /* QPV Sum & Qualification Flagging (PRD Table 4) */
   calculateQPVBaseline(memberId) {
     const descendantIds = this.getDescendantIds(memberId);
     const allIds = [memberId, ...descendantIds];

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GODSPEED HQ — Unified Operating Platform</title>
+  <title>GODSPEED HQ — Permission-Aware Operating Platform</title>
   <meta name="description" content="Unified operating platform for GODSPEED Team combining NeoLife MLM operations, digital freelancing, office administration, and leadership intelligence.">
 
   <!-- Google Fonts & FontAwesome -->
@@ -27,81 +27,123 @@
         </div>
         <div class="brand-info">
           <h1>GODSPEED HQ</h1>
-          <span>Unified Platform v1.1</span>
+          <span>Permission Architecture v1.1</span>
         </div>
       </div>
 
-      <div class="nav-section-title">Core Operations</div>
-      <ul class="nav-list">
-        <li>
-          <a href="#" class="nav-link active" data-tab="dashboard">
-            <i class="fas fa-chart-pie"></i>
-            <span>Executive Dashboard</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link" data-tab="genealogy">
-            <i class="fas fa-sitemap"></i>
-            <span>Genealogy & Team Tree</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link" data-tab="attendance">
-            <i class="fas fa-qrcode"></i>
-            <span>GPS & QR Attendance</span>
-          </a>
-        </li>
-      </ul>
+      <!-- PERSONAL MEMBER NAVIGATION -->
+      <div class="nav-section" id="nav-section-member">
+        <div class="nav-section-title">Personal Operating Hub</div>
+        <ul class="nav-list" id="nav-list-member">
+          <li>
+            <a href="#" class="nav-link active" data-route="/dashboard">
+              <i class="fas fa-user-circle"></i>
+              <span>My Personal Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/attendance">
+              <i class="fas fa-qrcode"></i>
+              <span>GPS & QR Attendance</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/pv">
+              <i class="fas fa-box-open"></i>
+              <span>NeoLife PV & Carriage</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/freelance">
+              <i class="fas fa-wallet"></i>
+              <span>Freelance 10/20/70 Ledger</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/dues">
+              <i class="fas fa-receipt"></i>
+              <span>Office Dues Ledger</span>
+            </a>
+          </li>
+        </ul>
+      </div>
 
-      <div class="nav-section-title">Economic Engines</div>
-      <ul class="nav-list">
-        <li>
-          <a href="#" class="nav-link" data-tab="pv">
-            <i class="fas fa-box-open"></i>
-            <span>NeoLife PV & Carriage</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link" data-tab="freelance">
-            <i class="fas fa-wallet"></i>
-            <span>Freelance 10/20/70 Ledger</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link" data-tab="dues">
-            <i class="fas fa-receipt"></i>
-            <span>Office Dues Ledger</span>
-          </a>
-        </li>
-      </ul>
+      <!-- ADDITIVE UPLINE / ANCESTOR TEAM NAVIGATION -->
+      <div class="nav-section" id="nav-section-team" style="display:none;">
+        <div class="nav-section-title">Genealogy Subtree</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-link" data-route="/team">
+              <i class="fas fa-users"></i>
+              <span>My Team (Subtree)</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/genealogy">
+              <i class="fas fa-sitemap"></i>
+              <span>Genealogy Tree Viewer</span>
+            </a>
+          </li>
+        </ul>
+      </div>
 
-      <div class="nav-section-title">Intelligence & Comms</div>
-      <ul class="nav-list">
-        <li>
-          <a href="#" class="nav-link" data-tab="health">
-            <i class="fas fa-heartbeat"></i>
-            <span>Leadership Health Engine</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link" data-tab="chat">
-            <i class="fas fa-comments"></i>
-            <span>Hierarchical Chat</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link" data-tab="notice">
-            <i class="fas fa-bullhorn"></i>
-            <span>Notice Board & Forum</span>
-          </a>
-        </li>
-      </ul>
+      <!-- ADDITIVE TEAM LEADER OFFICE NAVIGATION -->
+      <div class="nav-section" id="nav-section-leader" style="display:none;">
+        <div class="nav-section-title">Office Operations</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-link" data-route="/office-dashboard">
+              <i class="fas fa-building"></i>
+              <span>Office Management Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/health">
+              <i class="fas fa-heartbeat"></i>
+              <span>Leadership Health Engine</span>
+            </a>
+          </li>
+        </ul>
+      </div>
 
+      <!-- ADDITIVE SUPER ADMIN NAVIGATION -->
+      <div class="nav-section" id="nav-section-admin" style="display:none;">
+        <div class="nav-section-title">Master Organization</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-link" data-route="/admin/dashboard">
+              <i class="fas fa-shield-alt"></i>
+              <span>Master Organization Dashboard</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <!-- COMMUNITY & NOTICES -->
+      <div class="nav-section">
+        <div class="nav-section-title">Comms & Notices</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-link" data-route="/chat">
+              <i class="fas fa-comments"></i>
+              <span>Hierarchical Chat</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/notice">
+              <i class="fas fa-bullhorn"></i>
+              <span>Notice Board & Forum</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <!-- USER PROFILE CARD IN SIDEBAR -->
       <div class="user-context-card">
-        <div class="user-avatar-badge">SA</div>
+        <div class="user-avatar-badge" id="sidebar-user-avatar">SA</div>
         <div class="user-details">
-          <h4>Chief SuperAdmin</h4>
-          <span>GODSPEED Team</span>
+          <h4 id="sidebar-user-name">Chief SuperAdmin</h4>
+          <span id="sidebar-user-role">SUPER_ADMIN</span>
         </div>
       </div>
     </aside>
@@ -109,22 +151,31 @@
     <!-- Main Viewport -->
     <main class="main-viewport">
       
-      <!-- Top App Bar -->
+      <!-- Top App Bar with Server-Validated Permission Controls -->
       <header class="app-topbar">
         <div class="view-heading">
-          <h2 id="view-title-heading">Executive Dashboard</h2>
-          <p id="view-title-sub">Real-time business performance, office operations, and health intelligence</p>
+          <h2 id="view-title-heading">My Personal Operating Dashboard</h2>
+          <p id="view-title-sub">Personal performance, rank progress, tasks, and learning milestones</p>
         </div>
 
         <div class="topbar-controls">
-          <div class="role-switcher-box">
-            <i class="fas fa-user-shield" style="color:var(--accent-primary)"></i>
-            <span>View Context:</span>
-            <select id="global-role-select" class="role-select">
-              <option value="super_admin">Super Admin (Full Org)</option>
-              <option value="team_leader">Team Leader (Office View)</option>
-              <option value="upline">Upline / Ancestor (Subtree)</option>
-              <option value="member">Member Self-Service</option>
+          <!-- SIMULATED USER LOGIN CONTEXT (FOR DEMO AUTHENTICATION TESTING) -->
+          <div class="user-identity-box">
+            <i class="fas fa-user-check"></i>
+            <span>Simulate User:</span>
+            <select id="user-identity-select" class="user-identity-select">
+              <option value="MEM-001">Super Admin (Chief Admin)</option>
+              <option value="MEM-002">Team Leader (Sarah Miller - Ikeja HQ)</option>
+              <option value="MEM-003">Member w/ Descendants (Michael Brown)</option>
+              <option value="MEM-004">Ordinary Member (Alex Johnson)</option>
+            </select>
+          </div>
+
+          <!-- CONTROLLED DASHBOARD SWITCHER HEADER DROPDOWN -->
+          <div class="dashboard-switcher-box">
+            <i class="fas fa-th-large" style="color:var(--accent-primary)"></i>
+            <select id="dashboard-switcher-select" class="dashboard-switcher-select">
+              <!-- Rendered dynamically by godspeed-app.js based on authorized routes -->
             </select>
           </div>
 
@@ -137,276 +188,239 @@
         </div>
       </header>
 
-      <!-- TAB 1: EXECUTIVE DASHBOARD -->
-      <section id="tab-dashboard" class="tab-content active">
-        
-        <!-- Summary Cards -->
+      <!-- VIEW 1: MEMBER PERSONAL DASHBOARD (/dashboard) -->
+      <section id="view-member-dashboard" class="tab-content active">
         <div class="metrics-row">
           <div class="metric-box">
             <div class="metric-title">
-              <span>Total Team Members</span>
-              <i class="fas fa-users" style="color:var(--accent-primary)"></i>
+              <span>Personal Rank</span>
+              <i class="fas fa-award" style="color:var(--accent-primary)"></i>
             </div>
-            <div class="metric-number" id="dash-total-members">0</div>
-            <div class="metric-sub">Across 2 offices (Ikeja & Abuja)</div>
+            <div class="metric-number" style="color:var(--accent-primary)" id="member-dash-rank">Senior Manager</div>
+            <div class="metric-sub">Personal Operating Profile: <strong id="member-dash-name">Alex Johnson</strong></div>
           </div>
 
           <div class="metric-box">
             <div class="metric-title">
-              <span>Present Today</span>
-              <i class="fas fa-check-circle" style="color:var(--status-green)"></i>
+              <span>Personal Verified PPV</span>
+              <i class="fas fa-box" style="color:var(--status-green)"></i>
             </div>
-            <div class="metric-number" style="color:var(--status-green)" id="dash-present-today">0</div>
-            <div class="metric-sub">Verified by QR + GPS + Face</div>
+            <div class="metric-number" style="color:var(--status-green)" id="member-dash-pv">0 PV</div>
+            <div class="metric-sub">Approved carriage current period</div>
           </div>
 
           <div class="metric-box">
-            <div class="metric-title">
-              <span>Attendance Rate</span>
-              <i class="fas fa-chart-line" style="color:var(--status-blue)"></i>
-            </div>
-            <div class="metric-number" id="dash-attendance-rate">0%</div>
-            <div class="metric-sub">Rolling 24-hour verification</div>
+            <div class="metric-title"><span>QPV Rank Progress</span><i class="fas fa-chart-line"></i></div>
+            <div class="metric-number" id="member-dash-qpv">0 QPV</div>
+            <div class="metric-sub">Monthly QPV target calculation</div>
           </div>
 
           <div class="metric-box">
-            <div class="metric-title">
-              <span>Verified NeoLife PPV</span>
-              <i class="fas fa-box" style="color:var(--accent-secondary)"></i>
-            </div>
-            <div class="metric-number" style="color:var(--accent-secondary)" id="dash-total-pv">0 PV</div>
-            <div class="metric-sub">Current Sales Period (2026-08)</div>
+            <div class="metric-title"><span>Net Freelance Earnings</span><i class="fas fa-wallet"></i></div>
+            <div class="metric-number" style="color:var(--accent-secondary)" id="member-dash-earnings">₦0</div>
+            <div class="metric-sub">10/20/70 allocation active</div>
           </div>
         </div>
 
-        <!-- 5 Management Questions Overview Panel -->
         <div class="card-panel">
           <div class="panel-head">
-            <h3><i class="fas fa-compass" style="color:var(--accent-primary)"></i> The 5 Continuous Management Questions</h3>
+            <h3><i class="fas fa-tasks" style="color:var(--accent-primary)"></i> My Personal Tasks & Daily Operating Scorecard</h3>
           </div>
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
             <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm);">
-              <h5 style="color:var(--accent-primary); font-size:0.85rem; margin-bottom:0.35rem;">1. Who is this member?</h5>
-              <p style="font-size:0.8rem; color:var(--text-muted);">Authoritative profile with verified biometric consent, skills, and rank hierarchy.</p>
+              <h5 style="color:var(--status-green); font-size:0.85rem; margin-bottom:0.35rem;"><i class="fas fa-check-circle"></i> Today's Attendance</h5>
+              <p style="font-size:0.8rem; color:var(--text-muted);">Verified at GODSPEED HQ Ikeja (Geofence: 12.4m).</p>
             </div>
             <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm);">
-              <h5 style="color:var(--accent-primary); font-size:0.85rem; margin-bottom:0.35rem;">2. Where do they sit?</h5>
-              <p style="font-size:0.8rem; color:var(--text-muted);">Separates genealogy tree from primary office assignment & operational leadership.</p>
+              <h5 style="color:var(--status-blue); font-size:0.85rem; margin-bottom:0.35rem;"><i class="fas fa-book"></i> Reading Target</h5>
+              <p style="font-size:0.8rem; color:var(--text-muted);">The Business of the 21st Century (Page 45/180).</p>
             </div>
             <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm);">
-              <h5 style="color:var(--accent-primary); font-size:0.85rem; margin-bottom:0.35rem;">3. What activity is produced?</h5>
-              <p style="font-size:0.8rem; color:var(--text-muted);">Tracks verified PPV carriage, client outreach DMs, proposals, and freelance earnings.</p>
-            </div>
-            <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm);">
-              <h5 style="color:var(--accent-primary); font-size:0.85rem; margin-bottom:0.35rem;">4. How are they developing?</h5>
-              <p style="font-size:0.8rem; color:var(--text-muted);">Monitors skill courses, quiz scores, book reading streaks, and academic GPA/CGPA.</p>
+              <h5 style="color:var(--accent-secondary); font-size:0.85rem; margin-bottom:0.35rem;"><i class="fas fa-paper-plane"></i> Outreach DMs</h5>
+              <p style="font-size:0.8rem; color:var(--text-muted);">5 LinkedIn proposals submitted today.</p>
             </div>
           </div>
         </div>
-
       </section>
 
-      <!-- TAB 2: GENEALOGY & TEAM TREE -->
-      <section id="tab-genealogy" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-sitemap" style="color:var(--accent-primary)"></i> Sponsor Genealogy Hierarchy (Subtree Inspector)</h3>
-            <span class="badge badge-blue">Non-Cyclic Enforced</span>
-          </div>
-          <p style="font-size:0.825rem; color:var(--text-muted); margin-bottom:1.5rem;">
-            Displays ancestor-descendant relationships with real-time QPV aggregate calculations and rank qualification flagging.
-          </p>
-          <div id="genealogy-tree-container">
-            <!-- Rendered by godspeed-app.js -->
-          </div>
+      <!-- VIEW 2: UPLINE / ANCESTOR TEAM VIEW (/team) -->
+      <section id="view-team-dashboard" class="tab-content">
+        <div id="team-view-container">
+          <!-- Rendered by godspeed-app.js -->
         </div>
       </section>
 
-      <!-- TAB 3: GPS & QR ATTENDANCE -->
-      <section id="tab-attendance" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-qrcode" style="color:var(--status-green)"></i> Verified Attendance Audit Log</h3>
-            <button class="btn btn-primary btn-sm" onclick="document.getElementById('modal-attendance').classList.add('active')">
-              <i class="fas fa-qrcode"></i> Launch Check-in Simulator
-            </button>
-          </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Member</th>
-                  <th>Office</th>
-                  <th>Check In Timestamp</th>
-                  <th>Status</th>
-                  <th>Geofence Distance</th>
-                  <th>Verification Layer</th>
-                </tr>
-              </thead>
-              <tbody id="attendance-logs-body">
-                <!-- Rendered by godspeed-app.js -->
-              </tbody>
-            </table>
-          </div>
+      <!-- VIEW 3: TEAM LEADER OFFICE DASHBOARD (/office-dashboard) -->
+      <section id="view-office-dashboard" class="tab-content">
+        <div id="office-view-container">
+          <!-- Rendered by godspeed-app.js -->
         </div>
       </section>
 
-      <!-- TAB 4: NEOLIFE PV & CARRIAGE -->
-      <section id="tab-pv" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-box-open" style="color:var(--accent-secondary)"></i> NeoLife PV Submissions & Carriage State Machine</h3>
-            <span class="badge badge-amber">Period: 2026-08</span>
-          </div>
-          <p style="font-size:0.825rem; color:var(--text-muted); margin-bottom:1.25rem;">
-            State Machine Workflow: <code>PV_SUBMITTED</code> &rarr; <code>READY_FOR_PICKUP</code> &rarr; <code>CARRIAGE_UPLOADED</code> &rarr; <code>UNDER_REVIEW</code> &rarr; <code>APPROVED</code> / <code>DECLINED</code>.
-          </p>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Order Ref</th>
-                  <th>Member</th>
-                  <th>Sales Period</th>
-                  <th>PV Amount</th>
-                  <th>Workflow State</th>
-                  <th>Expected Pickup</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="pv-submissions-body">
-                <!-- Rendered by godspeed-app.js -->
-              </tbody>
-            </table>
-          </div>
+      <!-- VIEW 4: SUPER ADMIN MASTER DASHBOARD (/admin/dashboard) -->
+      <section id="view-admin-dashboard" class="tab-content">
+        <div id="admin-view-container">
+          <!-- Rendered by godspeed-app.js -->
         </div>
       </section>
 
-      <!-- TAB 5: FREELANCE 10/20/70 LEDGER -->
-      <section id="tab-freelance" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-wallet" style="color:var(--status-green)"></i> Freelancing Earnings & Fund Allocation Ledger</h3>
-            <button class="btn btn-primary btn-sm" onclick="document.getElementById('modal-earning').classList.add('active')">
-              <i class="fas fa-plus"></i> Record Verified Earning
-            </button>
-          </div>
-          <p style="font-size:0.825rem; color:var(--text-muted); margin-bottom:1.25rem;">
-            Automatic Policy Split: <strong>10% Office Due</strong> | <strong>20% Personal Savings</strong> | <strong>70% Business Reinvestment Fund</strong>.
-          </p>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Member</th>
-                  <th>Source / Channel</th>
-                  <th>Net Earnings</th>
-                  <th>10 / 20 / 70 Fund Breakdown</th>
-                </tr>
-              </thead>
-              <tbody id="earnings-ledger-body">
-                <!-- Rendered by godspeed-app.js -->
-              </tbody>
-            </table>
+      <!-- GENERAL TAB PANES (ATTENDANCE, PV, FREELANCE, DUES, HEALTH, CHAT, NOTICE) -->
+      <section id="view-general-tab" class="tab-content">
+        
+        <div id="pane-genealogy" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-sitemap" style="color:var(--accent-primary)"></i> Genealogy Hierarchy Inspector</h3>
+            </div>
+            <div id="genealogy-tree-container"></div>
           </div>
         </div>
-      </section>
 
-      <!-- TAB 6: LEADERSHIP HEALTH ENGINE -->
-      <section id="tab-health" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-heartbeat" style="color:var(--status-red)"></i> Leadership Health & Member Risk Intelligence</h3>
-          </div>
-          <p style="font-size:0.825rem; color:var(--text-muted); margin-bottom:1.25rem;">
-            Health States: <span class="badge badge-green">GREEN (Healthy)</span> <span class="badge badge-amber">AMBER (Warning)</span> <span class="badge badge-red">RED (At-Risk)</span>.
-          </p>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Member</th>
-                  <th>Health State</th>
-                  <th>Attendance 30d</th>
-                  <th>MTD PV</th>
-                  <th>Warning Signals</th>
-                  <th>Intervention</th>
-                </tr>
-              </thead>
-              <tbody id="health-scores-body">
-                <!-- Rendered by godspeed-app.js -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 7: OFFICE DUES LEDGER -->
-      <section id="tab-dues" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-receipt" style="color:var(--accent-primary)"></i> Office Operations Dues Ledger</h3>
-          </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Member</th>
-                  <th>Period / Reason</th>
-                  <th>Expected Amount</th>
-                  <th>Paid Amount</th>
-                  <th>Status</th>
-                  <th>Due Date</th>
-                </tr>
-              </thead>
-              <tbody id="dues-table-body">
-                <!-- Rendered by godspeed-app.js -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 8: HIERARCHICAL CHAT -->
-      <section id="tab-chat" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-comments" style="color:var(--accent-primary)"></i> Hierarchical Communication Center</h3>
-          </div>
-
-          <!-- Disclosure Banner PRD Section 34.2 -->
-          <div class="privacy-banner">
-            <i class="fas fa-shield-alt" style="font-size:1.25rem; color:var(--accent-primary)"></i>
-            <div>
-              <strong>Communication Privacy & Transparency Disclosure:</strong>
-              <br>Conversations inside GODSPEED HQ are monitored by your Sponsor, Upline/Ancestors, and Team Leader for organizational accountability and mentorship oversight. Do not share financial PINs or private secrets.
+        <div id="pane-attendance" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-qrcode" style="color:var(--status-green)"></i> GPS & QR Attendance Audit Log</h3>
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('modal-attendance').classList.add('active')">
+                <i class="fas fa-qrcode"></i> Launch Check-in Simulator
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Office</th>
+                    <th>Check In Timestamp</th>
+                    <th>Status</th>
+                    <th>Geofence Distance</th>
+                    <th>Verification Layer</th>
+                  </tr>
+                </thead>
+                <tbody id="attendance-logs-body"></tbody>
+              </table>
             </div>
           </div>
+        </div>
 
-          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 2rem; text-align: center;">
-            <i class="fas fa-lock" style="font-size: 2rem; color: var(--accent-primary); margin-bottom: 0.75rem; display:block;"></i>
-            <h4 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Hierarchical Chat Channel Ready</h4>
-            <p style="font-size: 0.85rem; color: var(--text-muted); max-width: 500px; margin: 0 auto 1.25rem auto;">
-              Connected to Supabase Realtime channels. Messages are filtered server-side via Row-Level Security (RLS) policies.
-            </p>
-            <button class="btn btn-secondary btn-sm" onclick="alert('Realtime chat channel re-connected to Supabase endpoint.')">
-              <i class="fas fa-sync"></i> Refresh Realtime Stream
-            </button>
+        <div id="pane-pv" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-box-open" style="color:var(--accent-secondary)"></i> NeoLife PV Submissions & Carriage State Machine</h3>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Order Ref</th>
+                    <th>Member</th>
+                    <th>Sales Period</th>
+                    <th>PV Amount</th>
+                    <th>Workflow State</th>
+                    <th>Expected Pickup</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="pv-submissions-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </section>
 
-      <!-- TAB 9: NOTICE BOARD -->
-      <section id="tab-notice" class="tab-content">
-        <div class="card-panel">
-          <div class="panel-head">
-            <h3><i class="fas fa-bullhorn" style="color:var(--accent-primary)"></i> Official Notice Board & Community Forum</h3>
-          </div>
-          <div id="notice-board-container">
-            <!-- Rendered by godspeed-app.js -->
+        <div id="pane-freelance" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-wallet" style="color:var(--status-green)"></i> Freelancing Earnings & 10/20/70 Allocation Ledger</h3>
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('modal-earning').classList.add('active')">
+                <i class="fas fa-plus"></i> Record Verified Earning
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Member</th>
+                    <th>Source / Channel</th>
+                    <th>Net Earnings</th>
+                    <th>10 / 20 / 70 Fund Breakdown</th>
+                  </tr>
+                </thead>
+                <tbody id="earnings-ledger-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
+
+        <div id="pane-dues" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-receipt" style="color:var(--accent-primary)"></i> Office Operations Dues Ledger</h3>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Period / Reason</th>
+                    <th>Expected Amount</th>
+                    <th>Paid Amount</th>
+                    <th>Status</th>
+                    <th>Due Date</th>
+                  </tr>
+                </thead>
+                <tbody id="dues-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="pane-health" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-heartbeat" style="color:var(--status-red)"></i> Leadership Health & Member Risk Intelligence</h3>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Health State</th>
+                    <th>Attendance 30d</th>
+                    <th>MTD PV</th>
+                    <th>Warning Signals</th>
+                    <th>Intervention</th>
+                  </tr>
+                </thead>
+                <tbody id="health-scores-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="pane-chat" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-comments" style="color:var(--accent-primary)"></i> Hierarchical Communication Center</h3>
+            </div>
+            <div class="privacy-banner">
+              <i class="fas fa-shield-alt" style="font-size:1.25rem; color:var(--accent-primary)"></i>
+              <div>
+                <strong>Communication Privacy & Transparency Disclosure:</strong>
+                <br>Conversations inside GODSPEED HQ are monitored by your Sponsor, Upline/Ancestors, and Team Leader for organizational accountability. Do not share financial PINs or passwords.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="pane-notice" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-bullhorn" style="color:var(--accent-primary)"></i> Official Notice Board & Community Forum</h3>
+            </div>
+            <div id="notice-board-container"></div>
+          </div>
+        </div>
+
       </section>
 
     </main>
@@ -435,7 +449,7 @@
         <i class="fas fa-map-marker-alt" style="color:var(--status-green)"></i> GPS Coordinates Acquired: <strong>6.60185° N, 3.35152° E</strong> (Distance: 12.4m from Ikeja HQ)
       </div>
 
-      <div style="display:flex; justify-end; gap:0.75rem;">
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-attendance').classList.remove('active')">Cancel</button>
         <button type="button" class="btn btn-primary" id="btn-simulate-attendance-scan">Verify & Save Attendance</button>
       </div>
