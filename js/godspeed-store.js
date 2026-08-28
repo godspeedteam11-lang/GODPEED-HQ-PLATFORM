@@ -605,6 +605,60 @@ class GodspeedStore {
     return { totalPV, eligibleRankFlag };
   }
 
+  async updateMemberRank(memberId, newRank) {
+    // 1. Update live Supabase DB
+    if (window.godspeedSupabase) {
+      try {
+        const { error } = await window.godspeedSupabase
+          .from('members')
+          .update({ official_rank: newRank, updated_at: new Date().toISOString() })
+          .eq('id', memberId);
+        
+        if (error) {
+          console.warn('Supabase rank update notice:', error.message);
+        }
+      } catch (err) {
+        console.error('Failed to update rank in Supabase DB:', err);
+      }
+    }
+
+    // 2. Update local state
+    const member = this.members.find(m => m.id === memberId);
+    if (member) {
+      member.rank = newRank;
+      this.save();
+      return { success: true, member, message: `Rank updated to ${newRank.replace('_', ' ').toUpperCase()} successfully!` };
+    }
+    return { success: false, message: 'Member record not found.' };
+  }
+
+  async updateMemberRole(memberId, newRole) {
+    // 1. Update live Supabase DB
+    if (window.godspeedSupabase) {
+      try {
+        const { error } = await window.godspeedSupabase
+          .from('members')
+          .update({ role: newRole, updated_at: new Date().toISOString() })
+          .eq('id', memberId);
+        
+        if (error) {
+          console.warn('Supabase role update notice:', error.message);
+        }
+      } catch (err) {
+        console.error('Failed to update role in Supabase DB:', err);
+      }
+    }
+
+    // 2. Update local state
+    const member = this.members.find(m => m.id === memberId);
+    if (member) {
+      member.role = newRole;
+      this.save();
+      return { success: true, member, message: `Role updated to ${newRole.replace('_', ' ').toUpperCase()} successfully!` };
+    }
+    return { success: false, message: 'Member record not found.' };
+  }
+
   getDescendantIds(ancestorId) {
     let descendants = [];
     const directRecruits = this.members.filter(m => m.sponsorId === ancestorId);

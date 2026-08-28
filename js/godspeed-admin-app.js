@@ -172,13 +172,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* RENDER ADMIN MEMBERS DIRECTORY */
+  /* RENDER ADMIN MEMBERS DIRECTORY & RANK MANAGEMENT */
   function renderAdminMembersDirectory() {
     if (!adminMasterContainer) return;
+
+    const ranksList = [
+      { id: 'newbie', label: 'Newbie' },
+      { id: 'manager', label: 'Manager' },
+      { id: 'senior_manager', label: 'Senior Manager' },
+      { id: 'executive_manager', label: 'Executive Manager' },
+      { id: 'director', label: 'Director' },
+      { id: 'sapphire_director', label: 'Sapphire Director' },
+      { id: 'ruby_director', label: 'Ruby Director' },
+      { id: 'emerald_director', label: 'Emerald Director' },
+      { id: 'diamond_director', label: 'Diamond Director' },
+      { id: 'president_team', label: "President's Team" }
+    ];
+
+    const rolesList = [
+      { id: 'member', label: 'Member' },
+      { id: 'team_leader', label: 'Team Leader' },
+      { id: 'trainer', label: 'Trainer' },
+      { id: 'finance_officer', label: 'Finance Officer' },
+      { id: 'admin', label: 'Admin' },
+      { id: 'super_admin', label: 'Super Admin' }
+    ];
 
     adminMasterContainer.innerHTML = `
       <div class="card-panel">
         <div class="panel-head">
-          <h3><i class="fas fa-users-cog"></i> Global Members Directory & Role Management</h3>
+          <h3><i class="fas fa-users-cog"></i> Global Members Directory & Live Rank Management</h3>
         </div>
         <div class="table-wrap">
           <table class="data-table">
@@ -186,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <tr>
                 <th>Member</th>
                 <th>Role</th>
-                <th>Official Rank</th>
+                <th>Official Rank (Live Edit)</th>
                 <th>Office</th>
                 <th>Email</th>
               </tr>
@@ -200,9 +223,17 @@ document.addEventListener('DOMContentLoaded', () => {
                       <div><h5>${escapeHTML(m.name)}</h5><p>${m.code}</p></div>
                     </div>
                   </td>
-                  <td><span class="badge ${m.role === 'super_admin' ? 'badge-red' : (m.role === 'team_leader' ? 'badge-blue' : 'badge-green')}">${m.role}</span></td>
-                  <td><span class="badge-rank">${formatRank(m.rank)}</span></td>
-                  <td>${m.officeId}</td>
+                  <td>
+                    <select class="admin-role-select" data-member-id="${m.id}" style="background:var(--bg-input); color:#fff; border:1px solid var(--border-color); padding:0.35rem 0.5rem; border-radius:4px; font-size:0.8rem;">
+                      ${rolesList.map(r => `<option value="${r.id}" ${m.role === r.id ? 'selected' : ''}>${r.label}</option>`).join('')}
+                    </select>
+                  </td>
+                  <td>
+                    <select class="admin-rank-select" data-member-id="${m.id}" style="background:var(--bg-input); color:#fff; border:1px solid var(--border-color); padding:0.35rem 0.5rem; border-radius:4px; font-size:0.8rem;">
+                      ${ranksList.map(rk => `<option value="${rk.id}" ${m.rank === rk.id ? 'selected' : ''}>${rk.label}</option>`).join('')}
+                    </select>
+                  </td>
+                  <td>${m.officeId || 'OFF-AKR'}</td>
                   <td>${escapeHTML(m.email)}</td>
                 </tr>
               `).join('')}
@@ -211,6 +242,33 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </div>
     `;
+
+    // Attach Rank & Role change event listeners
+    adminMasterContainer.querySelectorAll('.admin-rank-select').forEach(select => {
+      select.addEventListener('change', async (e) => {
+        const memberId = e.target.getAttribute('data-member-id');
+        const newRank = e.target.value;
+        const res = await store.updateMemberRank(memberId, newRank);
+        if (res.success) {
+          showToast(res.message);
+        } else {
+          alert('Failed to update rank: ' + res.message);
+        }
+      });
+    });
+
+    adminMasterContainer.querySelectorAll('.admin-role-select').forEach(select => {
+      select.addEventListener('change', async (e) => {
+        const memberId = e.target.getAttribute('data-member-id');
+        const newRole = e.target.value;
+        const res = await store.updateMemberRole(memberId, newRole);
+        if (res.success) {
+          showToast(res.message);
+        } else {
+          alert('Failed to update role: ' + res.message);
+        }
+      });
+    });
   }
 
   /* RENDER ADMIN OFFICES MANAGEMENT */

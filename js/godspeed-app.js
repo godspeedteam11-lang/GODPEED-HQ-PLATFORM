@@ -471,7 +471,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                   </td>
                   <td>${m.role}</td>
-                  <td><span class="badge-rank">${formatRank(m.rank)}</span></td>
+                  <td>
+                    <select class="leader-rank-select" data-member-id="${m.id}" style="background:var(--bg-input); color:#fff; border:1px solid var(--border-color); padding:0.35rem 0.5rem; border-radius:4px; font-size:0.8rem;">
+                      <option value="newbie" ${m.rank === 'newbie' ? 'selected' : ''}>Newbie</option>
+                      <option value="manager" ${m.rank === 'manager' ? 'selected' : ''}>Manager</option>
+                      <option value="senior_manager" ${m.rank === 'senior_manager' ? 'selected' : ''}>Senior Manager</option>
+                      <option value="executive_manager" ${m.rank === 'executive_manager' ? 'selected' : ''}>Executive Manager</option>
+                      <option value="director" ${m.rank === 'director' ? 'selected' : ''}>Director</option>
+                      <option value="sapphire_director" ${m.rank === 'sapphire_director' ? 'selected' : ''}>Sapphire Director</option>
+                      <option value="ruby_director" ${m.rank === 'ruby_director' ? 'selected' : ''}>Ruby Director</option>
+                      <option value="emerald_director" ${m.rank === 'emerald_director' ? 'selected' : ''}>Emerald Director</option>
+                      <option value="diamond_director" ${m.rank === 'diamond_director' ? 'selected' : ''}>Diamond Director</option>
+                      <option value="president_team" ${m.rank === 'president_team' ? 'selected' : ''}>President's Team</option>
+                    </select>
+                  </td>
                   <td>${escapeHTML(m.email)}</td>
                   <td><span class="badge badge-green">Active Member</span></td>
                 </tr>
@@ -481,6 +494,20 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </div>
     `;
+
+    // Attach event listeners for leader rank updates
+    container.querySelectorAll('.leader-rank-select').forEach(select => {
+      select.addEventListener('change', async (e) => {
+        const memberId = e.target.getAttribute('data-member-id');
+        const newRank = e.target.value;
+        const res = await store.updateMemberRank(memberId, newRank);
+        if (res.success) {
+          showToast(res.message);
+        } else {
+          alert('Failed to update rank: ' + res.message);
+        }
+      });
+    });
   }
 
   /* RENDER GENERAL TAB VIEWS */
