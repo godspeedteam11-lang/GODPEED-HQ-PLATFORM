@@ -173,6 +173,99 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Seed Default Offices with valid UUIDs (Official HQ Akure as primary)
+INSERT INTO offices (id, code, name, address, location, geofence_radius_meters, timezone)
+VALUES 
+  ('33333333-3333-3333-3333-333333333333', 'HQ-AKR', 'GODSPEED HQ Akure', 'Akure, Ondo State, Nigeria', ST_SetSRID(ST_MakePoint(5.2058, 7.2571), 4326)::geography, 30, 'Africa/Lagos'),
+  ('11111111-1111-1111-1111-111111111111', 'HQ-LGS', 'GODSPEED HQ Ikeja', 'Ikeja, Lagos, Nigeria', ST_SetSRID(ST_MakePoint(3.3515, 6.6018), 4326)::geography, 30, 'Africa/Lagos'),
+  ('22222222-2222-2222-2222-222222222222', 'HQ-ABJ', 'GODSPEED Abuja Hub', 'Abuja, Nigeria', ST_SetSRID(ST_MakePoint(7.3986, 9.0765), 4326)::geography, 40, 'Africa/Lagos')
+ON CONFLICT (code) DO NOTHING;
+
+-- Ensure members foreign key correctly references auth.users(id) rather than public.users
+DO $$ BEGIN
+    ALTER TABLE public.members DROP CONSTRAINT IF EXISTS members_id_fkey;
+    ALTER TABLE public.members ADD CONSTRAINT members_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+-- ============================================================================
+-- AUTOMATED MEMBER PROFILE TRIGGER ON SUPABASE AUTH SIGNUP
+-- SECURITY ENFORCED SERVER-SIDE: Always assigns role = 'member'
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.handle_new_user_signup()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_office_id UUID;
+    v_sponsor_uuid UUID;
+    v_raw_office TEXT;
+BEGIN
+    -- Extract office identifier from user metadata, defaulting to HQ-AKR
+    v_raw_office := COALESCE(
+        NEW.raw_user_meta_data->>'office_id',
+        NEW.raw_user_meta_data->>'office',
+        'HQ-AKR'
+    );
+
+    -- Safely resolve incoming office identifier (UUID string, office code, or confirmed mock ID) to public.offices.id UUID
+    SELECT id INTO v_office_id
+    FROM public.offices
+    WHERE id::text = v_raw_office
+       OR code = v_raw_office
+       OR code = CASE 
+            WHEN v_raw_office = 'OFF-AKR' THEN 'HQ-AKR'
+            WHEN v_raw_office = 'OFF-101' THEN 'HQ-LGS'
+            WHEN v_raw_office = 'OFF-102' THEN 'HQ-ABJ'
+            ELSE NULL
+          END;
+
+    -- Deterministic fallback to default HQ-AKR office UUID if unresolved
+    IF v_office_id IS NULL THEN
+        SELECT id INTO v_office_id FROM public.offices WHERE code = 'HQ-AKR';
+    END IF;
+
+    -- Resolve sponsor by member_code or email if provided in user metadata
+    IF NEW.raw_user_meta_data->>'sponsor' IS NOT NULL AND NEW.raw_user_meta_data->>'sponsor' <> '' THEN
+        SELECT id INTO v_sponsor_uuid FROM public.members 
+        WHERE member_code = UPPER(NEW.raw_user_meta_data->>'sponsor') 
+           OR LOWER(email) = LOWER(NEW.raw_user_meta_data->>'sponsor');
+    END IF;
+
+    -- Insert member profile record (Errors are not swallowed so real DB failures trigger rollback)
+    INSERT INTO public.members (
+        id,
+        member_code,
+        full_name,
+        email,
+        phone,
+        sponsor_id,
+        role,
+        official_rank,
+        primary_office_id,
+        onboarding_completed
+    ) VALUES (
+        NEW.id,
+        'GSD-' || UPPER(SUBSTRING(NEW.id::text FROM 1 FOR 6)),
+        COALESCE(NEW.raw_user_meta_data->>'full_name', 'New Member'),
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'phone', ''),
+        v_sponsor_uuid,
+        'member'::user_role,
+        'newbie'::neolife_rank,
+        v_office_id,
+        FALSE
+    )
+    ON CONFLICT (id) DO NOTHING;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger firing automatically after Supabase auth.users row creation
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_signup();
+
 -- ============================================================================
 -- SERVER-SIDE DASHBOARD ROUTE PERMISSION ENGINE (RPC)
 -- ============================================================================

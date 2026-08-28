@@ -48,19 +48,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const formAddEarning = document.getElementById('form-add-earning');
 
   /* Application Initialization */
-  function init() {
+  async function init() {
     setupPublicAuthEvents();
     setupNavigationListeners();
     setupEventListeners();
     setupUserIdentitySwitcher();
     setupDashboardSwitcher();
+    setupSupabaseAuthListener();
 
-    // Check existing auth state
+    // Check existing auth session state
     if (store.isAuthenticated && store.currentUserId) {
       const perms = store.getUserPermissions();
       routeTo(perms.defaultRoute);
     } else {
       routeTo('/');
+    }
+  }
+
+  /* Listen to Real Supabase Auth State Changes */
+  function setupSupabaseAuthListener() {
+    if (window.supabaseAuth) {
+      window.supabaseAuth.onAuthChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          store.syncSupabaseSession().then(() => {
+            const perms = store.getUserPermissions();
+            routeTo(perms.defaultRoute);
+          });
+        } else if (event === 'SIGNED_OUT') {
+          routeTo('/');
+        }
+      });
     }
   }
 
@@ -79,49 +96,87 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Public Sign In Form Submit
     if (formPublicLogin) {
-      formPublicLogin.addEventListener('submit', (e) => {
+      formPublicLogin.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = document.getElementById('login-email').value;
+        const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value;
 
-        const authRes = store.authenticateUser(email, password);
+        if (!email || !password) {
+          alert('Please enter your email address and password.');
+          return;
+        }
+
+        const authRes = await store.authenticateUser(email, password);
         if (authRes.success) {
           showToast(`Welcome back, ${authRes.member.name}!`);
           routeTo(authRes.permissions.defaultRoute);
         } else {
-          alert(authRes.message);
+          alert('Sign In Failed: ' + authRes.message);
         }
       });
     }
 
     // Public Sign Up Form Submit (SECURITY ENFORCED: Role is ALWAYS 'member')
     if (formPublicSignup) {
-      formPublicSignup.addEventListener('submit', (e) => {
+      formPublicSignup.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const name = document.getElementById('signup-name').value;
-        const email = document.getElementById('signup-email').value;
-        const phone = document.getElementById('signup-phone').value;
+        const submitBtn = formPublicSignup.querySelector('button[type="submit"]');
+        const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '<i class="fas fa-check-circle"></i> Create Member Account';
+        
+        const name = document.getElementById('signup-name').value.trim();
+        const email = document.getElementById('signup-email').value.trim();
+        const phone = document.getElementById('signup-phone').value.trim();
         const password = document.getElementById('signup-password').value;
-        const sponsor = document.getElementById('signup-sponsor').value;
-        const office = document.getElementById('signup-office').value;
+        const sponsor = document.getElementById('signup-sponsor').value.trim();
+        const office = 'OFF-AKR'; // Strictly locked to official GODSPEED HQ Akure
+        
+        if (!name || !email || !password) {
+          alert('Please fill in all required fields (Name, Email, Password).');
+          return;
+        }
 
-        const regRes = store.registerMember(name, email, phone, password, sponsor, office);
-        if (regRes.success) {
-          // Auto login new member
-          store.authenticateUser(email, password);
-          showToast(`Account created! Welcome to GODSPEED HQ, ${name}.`);
-          routeTo('/dashboard');
-        } else {
-          alert(regRes.message);
+        if (password.length < 6) {
+          alert('Password must be at least 6 characters long.');
+          return;
+        }
+
+        try {
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
+          }
+
+          const regRes = await store.registerMember(name, email, phone, password, sponsor, office);
+          
+          if (regRes.success) {
+            formPublicSignup.reset();
+            if (regRes.requiresConfirmation) {
+              alert(regRes.message);
+              routeTo('/login');
+            } else {
+              showToast(`Account created! Welcome to GODSPEED HQ, ${name}.`);
+              routeTo('/dashboard');
+            }
+          } else {
+            alert('Create Account Failed: ' + regRes.message);
+          }
+        } catch (err) {
+          console.error('Sign up error:', err);
+          alert('An unexpected error occurred during account creation: ' + (err.message || err));
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnHtml;
+          }
         }
       });
     }
 
     // Logout button
     document.querySelectorAll('.btn-member-logout').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
-        store.logout();
+        await store.logout();
         showToast('Logged out successfully.');
         routeTo('/');
       });

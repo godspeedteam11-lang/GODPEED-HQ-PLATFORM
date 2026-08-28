@@ -26,7 +26,7 @@ class GodspeedStore {
     this.init();
   }
 
-  init() {
+  async init() {
     const saved = localStorage.getItem(this.STORAGE_KEY);
     if (saved) {
       try {
@@ -51,6 +51,192 @@ class GodspeedStore {
     } else {
       this.seedInitialData();
     }
+
+    // Connect to Real Supabase Auth Session
+    await this.syncSupabaseSession();
+  }
+
+  async syncSupabaseSession() {
+    if (!window.supabaseAuth) return;
+    try {
+      const { data } = await window.supabaseAuth.getSupabaseSession();
+      if (data && data.session && data.session.user) {
+        const sbUser = data.session.user;
+        this.activeAuthUser = sbUser;
+        this.isAuthenticated = true;
+        this.currentUserId = sbUser.id;
+        
+        let member = this.members.find(m => m.id === sbUser.id || m.email.toLowerCase() === sbUser.email.toLowerCase());
+        if (!member) {
+          member = {
+            id: sbUser.id,
+            code: 'GSD-' + sbUser.id.substring(0, 6).toUpperCase(),
+            name: sbUser.user_metadata?.full_name || sbUser.email.split('@')[0],
+            email: sbUser.email.toLowerCase(),
+            phone: sbUser.user_metadata?.phone || '',
+            role: 'member',
+            rank: 'newbie',
+            officeId: 'OFF-AKR',
+            sponsorId: 'MEM-001'
+          };
+          this.members.push(member);
+        }
+        this.save();
+      } else {
+        this.activeAuthUser = null;
+        if (!window.GODSPEED_CONFIG || !window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
+          this.currentUserId = null;
+          this.isAuthenticated = false;
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase Session Sync:', err);
+    }
+  }
+
+  /* Public Member Signup (Real Supabase Auth + Trigger Profile Creation) */
+  async registerMember(fullName, email, phone, password, sponsorCode = null, officeId = 'OFF-AKR') {
+    if (!fullName || !email || !password) {
+      return { success: false, message: 'Please fill in all required fields (Name, Email, Password).' };
+    }
+
+    if (password.length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters long.' };
+    }
+
+    if (window.supabaseAuth) {
+      try {
+        const { data, error } = await window.supabaseAuth.signUpUser(email, password, fullName, phone, sponsorCode, officeId);
+        if (error) {
+          if (window.GODSPEED_CONFIG && window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
+            console.warn('Supabase Auth error, falling back to demo mode:', error.message);
+          } else {
+            return { success: false, message: error.message };
+          }
+        } else if (data && data.user) {
+          const newUserId = data.user.id;
+          const newMember = {
+            id: newUserId,
+            code: 'GSD-' + newUserId.substring(0, 6).toUpperCase(),
+            name: fullName,
+            email: email.toLowerCase(),
+            phone: phone || '',
+            role: 'member',
+            rank: 'newbie',
+            officeId: 'OFF-AKR',
+            sponsorId: sponsorCode || 'MEM-001'
+          };
+
+          if (!this.members.some(m => m.id === newUserId || m.email.toLowerCase() === email.toLowerCase())) {
+            this.members.push(newMember);
+          }
+
+          if (data.session) {
+            this.currentUserId = newUserId;
+            this.isAuthenticated = true;
+            this.activeAuthUser = data.user;
+            this.save();
+            return { success: true, member: newMember, message: 'Account created! Welcome to GODSPEED HQ.' };
+          } else {
+            this.save();
+            return { 
+              success: true, 
+              member: newMember, 
+              requiresConfirmation: true, 
+              message: 'Account created successfully! If email confirmation is enabled on your Supabase project, please check your inbox before logging in.' 
+            };
+          }
+        }
+      } catch (err) {
+        console.error('Registration exception:', err);
+        if (!window.GODSPEED_CONFIG || !window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
+          return { success: false, message: 'Signup failed due to connection error: ' + (err.message || err) };
+        }
+      }
+    }
+
+    // Demo Mode Fallback (ONLY if ENABLE_DEMO_MODE is true)
+    if (window.GODSPEED_CONFIG && window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
+      const newId = 'MEM-' + String(this.members.length + 1).padStart(3, '0');
+      const newMember = {
+        id: newId,
+        code: 'GSD-' + String(this.members.length + 1).padStart(3, '0'),
+        name: fullName,
+        email: email.toLowerCase(),
+        phone: phone || '',
+        role: 'member',
+        rank: 'newbie',
+        officeId: 'OFF-AKR',
+        sponsorId: sponsorCode || 'MEM-001'
+      };
+      this.members.push(newMember);
+      this.currentUserId = newId;
+      this.isAuthenticated = true;
+      this.save();
+      return { success: true, member: newMember, message: 'Account created in Demo Mode!' };
+    }
+
+    return { success: false, message: 'Signup Failed: Unable to establish Supabase Auth connection.' };
+  }
+
+  /* Authenticate User Sign In via Supabase Auth */
+  async authenticateUser(email, password) {
+    if (window.supabaseAuth) {
+      const { data, error } = await window.supabaseAuth.signInUser(email, password);
+      if (!error && data && data.user) {
+        await this.syncSupabaseSession();
+        const member = this.getCurrentUser();
+        const perms = this.getUserPermissions(member ? member.id : data.user.id);
+        return { success: true, member, permissions: perms };
+      }
+      if (error && (!window.GODSPEED_CONFIG || !window.GODSPEED_CONFIG.ENABLE_DEMO_MODE)) {
+        return { success: false, message: error.message };
+      }
+    }
+
+    // Demo Credentials Fallback (ONLY if ENABLE_DEMO_MODE is true)
+    if (window.GODSPEED_CONFIG && window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
+      const member = this.members.find(m => m.email.toLowerCase() === email.toLowerCase());
+      if (!member) {
+        return { success: false, message: 'Invalid credentials. User account not found.' };
+      }
+      if (password && member.password && password !== member.password && password !== 'password123') {
+        return { success: false, message: 'Invalid email or password.' };
+      }
+      this.currentUserId = member.id;
+      this.isAuthenticated = true;
+      this.save();
+      const perms = this.getUserPermissions(member.id);
+      return { success: true, member, permissions: perms };
+    }
+
+    return { success: false, message: 'Authentication Failed: Invalid email or password.' };
+  }
+
+  /* Authenticate Super Admin Control Center Sign In */
+  async authenticateAdmin(email, password) {
+    const authResult = await this.authenticateUser(email, password);
+    if (!authResult.success) return authResult;
+
+    const perms = authResult.permissions;
+    if (!perms.isSuperAdmin) {
+      await this.logout();
+      return { 
+        success: false, 
+        message: '403 Forbidden: Account lacks Super Admin permissions to access Control Center.' 
+      };
+    }
+
+    return authResult;
+  }
+
+  async logout() {
+    if (window.supabaseAuth) {
+      await window.supabaseAuth.signOutUser();
+    }
+    this.currentUserId = null;
+    this.isAuthenticated = false;
+    this.save();
   }
 
   seedInitialData() {
