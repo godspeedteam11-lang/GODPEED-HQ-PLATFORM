@@ -1540,95 +1540,142 @@ DECLARE
     v_tx public.payment_transactions%ROWTYPE;
     v_office public.offices%ROWTYPE;
     v_period_interval INTERVAL;
-    v_expected_amount NUMERIC(12,2);
+    v_expected_amount_kobo NUMERIC;
+    v_payload_amount_kobo NUMERIC;
+    v_payload_currency TEXT;
+    v_payload_status TEXT;
 BEGIN
+    -- 1. Find transaction record
     SELECT * INTO v_tx FROM public.payment_transactions WHERE reference = p_reference;
     IF v_tx.id IS NULL THEN
-        RAISE EXCEPTION 'Transaction reference % not found in database', p_reference;
+        RAISE EXCEPTION 'Transaction reference "%" not found in database', p_reference;
     END IF;
 
-    -- Prevent Replay Attack / Duplicate Processing
+    -- 2. Prevent Replay Attack / Duplicate Activation
     IF v_tx.status = 'success' THEN
-        RETURN jsonb_build_object('success', TRUE, 'status', 'already_processed', 'message', 'Transaction already confirmed.');
+        RETURN jsonb_build_object(
+            'success', TRUE, 
+            'status', 'already_processed', 
+            'message', 'Transaction has already been verified and processed.'
+        );
     END IF;
 
-    IF p_event = 'charge.success' THEN
-        -- Expected Amount Validation
-        v_expected_amount := CASE 
-            WHEN v_tx.plan_id = 'starter_monthly' THEN 7500.00
-            WHEN v_tx.plan_id = 'growth_monthly' THEN 18000.00
-            WHEN v_tx.plan_id = 'starter_annual' THEN 75000.00
-            WHEN v_tx.plan_id = 'growth_annual' THEN 180000.00
-            ELSE NULL
-        END;
+    -- 3. Extract verified Paystack parameters from server payload
+    v_payload_amount_kobo := COALESCE(
+        (p_payload->'data'->>'amount')::NUMERIC, 
+        (p_payload->>'amount')::NUMERIC, 
+        0
+    );
+    v_payload_currency := UPPER(COALESCE(
+        p_payload->'data'->>'currency', 
+        p_payload->>'currency', 
+        ''
+    ));
+    v_payload_status := LOWER(COALESCE(
+        p_payload->'data'->>'status', 
+        p_payload->>'status', 
+        ''
+    ));
 
-        IF v_expected_amount IS NULL OR v_tx.amount < v_expected_amount THEN
-            UPDATE public.payment_transactions
-            SET status = 'failed', provider_response = p_payload
-            WHERE id = v_tx.id;
-            RAISE EXCEPTION 'Payment verification failed: Amount paid (₦%) does not match required plan amount (₦%)', v_tx.amount, v_expected_amount;
-        END IF;
+    -- 4. Calculate exact required amount in Kobo based on plan
+    v_expected_amount_kobo := CASE 
+        WHEN v_tx.plan_id = 'starter_monthly' THEN 750000.00
+        WHEN v_tx.plan_id = 'growth_monthly' THEN 1800000.00
+        WHEN v_tx.plan_id = 'starter_annual' THEN 7500000.00
+        WHEN v_tx.plan_id = 'growth_annual' THEN 18000000.00
+        ELSE NULL
+    END;
 
-        SELECT * INTO v_office FROM public.offices WHERE id = v_tx.office_id;
-        v_period_interval := CASE WHEN v_tx.plan_id LIKE '%annual%' THEN INTERVAL '1 year' ELSE INTERVAL '1 month' END;
-
-        -- 1. Update Payment Transaction Record
-        UPDATE public.payment_transactions
-        SET status = 'success',
-            paid_at = NOW(),
-            provider_response = p_payload
-        WHERE id = v_tx.id;
-
-        -- 2. Update Office Subscription Status
-        UPDATE public.offices
-        SET subscription_status = 'active',
-            subscription_plan_id = v_tx.plan_id,
-            billing_cycle = CASE WHEN v_tx.plan_id LIKE '%annual%' THEN 'annual' ELSE 'monthly' END,
-            member_limit = CASE WHEN v_tx.plan_id LIKE '%growth%' THEN 999999 ELSE 49 END,
-            updated_at = NOW()
-        WHERE id = v_tx.office_id;
-
-        -- 3. Update Subscriptions Ledger
-        UPDATE public.subscriptions
-        SET status = 'active',
-            plan_id = v_tx.plan_id,
-            current_period_start = NOW(),
-            current_period_end = NOW() + v_period_interval,
-            updated_at = NOW()
-        WHERE office_id = v_tx.office_id;
-
-        -- 4. Audit Subscription Event
-        INSERT INTO public.subscription_events (
-            office_id, event_type, amount_paid, notes
-        ) VALUES (
-            v_tx.office_id, 'payment_received', v_tx.amount, 'Verified Paystack payment reference: ' || p_reference
-        );
-
-        -- 5. Notify Office Owner
-        INSERT INTO public.notifications (
-            office_id, type, title, message, action_url
-        ) VALUES (
-            v_tx.office_id,
-            'system',
-            '💳 Subscription Payment Confirmed',
-            'Your payment of ₦' || TO_CHAR(v_tx.amount, 'FM999,999.00') || ' was verified. Your ' || v_tx.plan_id || ' subscription is now active.',
-            '/office-settings'
-        );
-
-        RETURN jsonb_build_object('success', TRUE, 'status', 'active');
-    ELSE
+    -- 5. Strict Server-Side Validation: Event, Status, Currency, and Exact Amount
+    IF p_event <> 'charge.success' OR v_payload_status <> 'success' THEN
         UPDATE public.payment_transactions
         SET status = 'failed', provider_response = p_payload
         WHERE id = v_tx.id;
-        RETURN jsonb_build_object('success', FALSE, 'status', 'failed');
+        RETURN jsonb_build_object('success', FALSE, 'status', 'failed', 'reason', 'Payment was not marked successful by Paystack');
     END IF;
+
+    IF v_payload_currency <> 'NGN' THEN
+        UPDATE public.payment_transactions
+        SET status = 'failed', provider_response = p_payload
+        WHERE id = v_tx.id;
+        RAISE EXCEPTION 'Currency mismatch: Expected NGN, received %', v_payload_currency;
+    END IF;
+
+    IF v_expected_amount_kobo IS NULL OR v_payload_amount_kobo <> v_expected_amount_kobo THEN
+        UPDATE public.payment_transactions
+        SET status = 'failed', provider_response = p_payload
+        WHERE id = v_tx.id;
+        RAISE EXCEPTION 'Exact amount mismatch: Expected % kobo (₦%), but Paystack verified % kobo (₦%)', 
+            v_expected_amount_kobo, (v_expected_amount_kobo / 100.00), 
+            v_payload_amount_kobo, (v_payload_amount_kobo / 100.00);
+    END IF;
+
+    -- 6. Update Verified Transaction
+    UPDATE public.payment_transactions
+    SET status = 'success',
+        amount = (v_expected_amount_kobo / 100.00),
+        currency = 'NGN',
+        paid_at = NOW(),
+        provider_response = p_payload
+    WHERE id = v_tx.id;
+
+    -- 7. Activate / Renew Office Subscription
+    SELECT * INTO v_office FROM public.offices WHERE id = v_tx.office_id;
+    v_period_interval := CASE WHEN v_tx.plan_id LIKE '%annual%' THEN INTERVAL '1 year' ELSE INTERVAL '1 month' END;
+
+    UPDATE public.offices
+    SET subscription_status = 'active',
+        subscription_plan_id = v_tx.plan_id,
+        billing_cycle = CASE WHEN v_tx.plan_id LIKE '%annual%' THEN 'annual' ELSE 'monthly' END,
+        member_limit = CASE WHEN v_tx.plan_id LIKE '%growth%' THEN 999999 ELSE 49 END,
+        updated_at = NOW()
+    WHERE id = v_tx.office_id;
+
+    -- 8. Update Subscriptions Table Ledger
+    UPDATE public.subscriptions
+    SET status = 'active',
+        plan_id = v_tx.plan_id,
+        billing_cycle = CASE WHEN v_tx.plan_id LIKE '%annual%' THEN 'annual' ELSE 'monthly' END,
+        current_period_start = NOW(),
+        current_period_end = NOW() + v_period_interval,
+        updated_at = NOW()
+    WHERE office_id = v_tx.office_id;
+
+    -- 9. Record Subscription Audit Event
+    INSERT INTO public.subscription_events (
+        office_id, event_type, amount_paid, notes
+    ) VALUES (
+        v_tx.office_id, 
+        'payment_received', 
+        (v_expected_amount_kobo / 100.00), 
+        'Exact verified Paystack payment reference: ' || p_reference
+    );
+
+    -- 10. Notify Office Owner
+    INSERT INTO public.notifications (
+        office_id, type, title, message, action_url
+    ) VALUES (
+        v_tx.office_id,
+        'system',
+        '💳 Subscription Payment Confirmed',
+        'Your payment of ₦' || TO_CHAR((v_expected_amount_kobo / 100.00), 'FM999,999.00') || ' was verified by Paystack. Your ' || v_tx.plan_id || ' subscription is active.',
+        '/office-settings'
+    );
+
+    RETURN jsonb_build_object(
+        'success', TRUE, 
+        'status', 'active', 
+        'reference', p_reference,
+        'amount_ngn', (v_expected_amount_kobo / 100.00),
+        'plan_id', v_tx.plan_id
+    );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
--- Security Boundary: Restrict Webhook Execution to Service Role
-REVOKE EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM anon;
-REVOKE EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM authenticated;
+-- Security Boundary: Strictly Restrict Execution to Service Role Only
+REVOKE ALL ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM anon;
+REVOKE ALL ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) TO service_role;
 
 -- ============================================================================
