@@ -755,3 +755,521 @@ body {
   .public-navbar { padding: 1rem; }
   .hero-title { font-size: 2.25rem; }
 }
+
+/* ==========================================================================
+   LEGACYOS PRODUCT & MARKETING SECTION STYLES
+   ========================================================================== */
+
+.legacyos-section-wrap {
+  width: 100%;
+  max-width: 1160px;
+  margin: 2rem auto 5rem auto;
+  padding: 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3.5rem;
+}
+
+.legacyos-hero-box {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-lg);
+  padding: 3rem 2.5rem;
+  text-align: center;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 40px -15px rgba(99, 102, 241, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.legacyos-hero-box::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 380px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.legacyos-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 0.45rem 1.15rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+
+.legacyos-title {
+  font-size: 2.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+}
+
+.legacyos-subtitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  max-width: 780px;
+  margin: 0 auto 1.75rem auto;
+  line-height: 1.5;
+}
+
+.legacyos-body-text {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 860px;
+  margin: 0 auto 1.5rem auto;
+  line-height: 1.7;
+}
+
+.legacyos-body-highlight {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+  max-width: 860px;
+  margin: 1.5rem auto 2.25rem auto;
+  font-size: 0.95rem;
+  color: #e2e8f0;
+  line-height: 1.6;
+}
+
+.legacyos-btn-group {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.legacyos-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.85rem 1.85rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  border: none;
+  box-shadow: var(--shadow-glow);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.legacyos-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 28px rgba(139, 92, 246, 0.45);
+  color: #fff;
+}
+
+.legacyos-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 0.85rem 1.85rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  border: 1px solid var(--border-color);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.legacyos-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  color: #fff;
+}
+
+/* SECTION HEADINGS */
+.legacyos-section-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.legacyos-section-header h2 {
+  font-size: 2.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.legacyos-section-header p {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+/* FEATURE CARDS GRID */
+.legacyos-features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.legacyos-feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.legacyos-feature-card:hover {
+  border-color: var(--border-active);
+  background: var(--bg-card-hover);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.5);
+}
+
+.legacyos-feature-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.legacyos-feature-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.4rem;
+}
+
+.legacyos-feature-desc {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* DEMO CARDS */
+.legacyos-demos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.legacyos-demo-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+}
+
+.legacyos-demo-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px -10px rgba(99, 102, 241, 0.2);
+}
+
+.legacyos-demo-thumb {
+  height: 190px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-bottom: 1px solid var(--border-color);
+  text-decoration: none;
+}
+
+.legacyos-play-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  padding-left: 4px;
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.6);
+  transition: transform 0.25s ease;
+}
+
+.legacyos-demo-thumb:hover .legacyos-play-btn {
+  transform: scale(1.12);
+}
+
+.legacyos-demo-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.legacyos-demo-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  margin-bottom: 0.4rem;
+  letter-spacing: 0.05em;
+}
+
+.legacyos-demo-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.legacyos-demo-desc {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+  flex: 1;
+}
+
+/* PRICING SECTION */
+.legacyos-trial-banner {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(99, 102, 241, 0.15) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-md);
+  padding: 1.15rem 1.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.legacyos-trial-icon {
+  font-size: 1.75rem;
+  color: var(--status-green);
+}
+
+.legacyos-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.75rem;
+}
+
+.legacyos-pricing-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 2rem;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.legacyos-pricing-card.popular {
+  border-color: var(--border-active);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+  box-shadow: 0 16px 36px -10px rgba(99, 102, 241, 0.25);
+}
+
+.legacyos-card-badge {
+  position: absolute;
+  top: -12px;
+  right: 20px;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 0.25rem 0.85rem;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+}
+
+.legacyos-plan-name {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.legacyos-plan-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.legacyos-price-row {
+  margin-bottom: 1rem;
+}
+
+.legacyos-price-monthly {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.legacyos-price-monthly span {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.legacyos-price-yearly-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.legacyos-free-badge {
+  background: var(--status-green-bg);
+  color: var(--status-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-size: 0.725rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.legacyos-features-list {
+  list-style: none;
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.legacyos-features-list li {
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.legacyos-features-list li i {
+  color: var(--status-green);
+  font-size: 0.85rem;
+}
+
+/* GET STARTED STEPS */
+.legacyos-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+
+.legacyos-step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.75rem 1.5rem;
+  position: relative;
+  text-align: left;
+}
+
+.legacyos-step-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+}
+
+.legacyos-step-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.4rem;
+}
+
+.legacyos-step-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* SUPPORT & FINAL CTA */
+.legacyos-support-card {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.legacyos-support-info {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.legacyos-whatsapp-icon {
+  font-size: 1.75rem;
+  color: #25D366;
+}
+
+.legacyos-footer-note {
+  text-align: center;
+  font-size: 0.825rem;
+  color: var(--text-dim);
+  padding: 2rem 0;
+  border-top: 1px solid var(--border-color);
+}
+
+@media (max-width: 768px) {
+  .legacyos-title { font-size: 2.1rem; }
+  .legacyos-subtitle { font-size: 1.1rem; }
+  .legacyos-hero-box { padding: 2rem 1.25rem; }
+  .legacyos-pricing-grid, .legacyos-demos-grid, .legacyos-steps-grid { grid-template-columns: 1fr; }
+  .legacyos-trial-banner { flex-direction: column; text-align: center; }
+  .legacyos-support-card { flex-direction: column; text-align: center; }
+}
