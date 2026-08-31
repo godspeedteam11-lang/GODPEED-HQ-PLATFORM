@@ -139,60 +139,86 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Public Sign Up Form Submit (SECURITY ENFORCED: Role is ALWAYS 'member')
-    if (formPublicSignup) {
-      formPublicSignup.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const submitBtn = formPublicSignup.querySelector('button[type="submit"]');
-        const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '<i class="fas fa-check-circle"></i> Create Member Account';
-        
-        const name = document.getElementById('signup-name').value.trim();
-        const email = document.getElementById('signup-email').value.trim();
-        const phone = document.getElementById('signup-phone').value.trim();
-        const password = document.getElementById('signup-password').value;
-        const sponsor = document.getElementById('signup-sponsor').value.trim();
-        const officeSelect = document.getElementById('signup-office');
-        const office = officeSelect ? officeSelect.value : 'HQ-AKR';
-        
-        if (!name || !email || !password) {
-          alert('Please fill in all required fields (Name, Email, Password).');
-          return;
+    // Public Sign Up Handler (Form Submit + Direct Button Click Support)
+    async function handleSignupExecution(e) {
+      if (e) e.preventDefault();
+      const submitBtn = document.getElementById('btn-submit-signup') || formPublicSignup?.querySelector('button[type="submit"]');
+      const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '<i class="fas fa-check-circle"></i> Create Member Account';
+      
+      const nameInput = document.getElementById('signup-name');
+      const emailInput = document.getElementById('signup-email');
+      const phoneInput = document.getElementById('signup-phone');
+      const passwordInput = document.getElementById('signup-password');
+      const sponsorInput = document.getElementById('signup-sponsor');
+      const officeSelect = document.getElementById('signup-office');
+
+      const name = nameInput ? nameInput.value.trim() : '';
+      const email = emailInput ? emailInput.value.trim() : '';
+      const phone = phoneInput ? phoneInput.value.trim() : '';
+      const password = passwordInput ? passwordInput.value : '';
+      const sponsor = sponsorInput ? sponsorInput.value.trim() : '';
+      const office = officeSelect ? officeSelect.value : 'HQ-AKR';
+
+      console.log('Initiating member signup:', { name, email, phone, office });
+
+      if (!name) {
+        alert('Please enter your Full Name.');
+        if (nameInput) nameInput.focus();
+        return;
+      }
+      if (!email || !email.includes('@')) {
+        alert('Please enter a valid Email Address.');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+      if (!password || password.length < 6) {
+        alert('Password must be at least 6 characters long.');
+        if (passwordInput) passwordInput.focus();
+        return;
+      }
+
+      try {
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
         }
 
-        if (password.length < 6) {
-          alert('Password must be at least 6 characters long.');
-          return;
-        }
-
-        try {
-          if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
-          }
-
-          const regRes = await store.registerMember(name, email, phone, password, sponsor, office);
-          
-          if (regRes.success) {
-            formPublicSignup.reset();
-            if (regRes.requiresConfirmation) {
-              alert(regRes.message);
-              routeTo('/login');
-            } else {
-              showToast(`Account created! Welcome to GODSPEED HQ, ${name}.`);
-              routeTo('/dashboard');
-            }
+        const regRes = await store.registerMember(name, email, phone, password, sponsor, office);
+        console.log('registerMember response:', regRes);
+        
+        if (regRes.success) {
+          if (formPublicSignup) formPublicSignup.reset();
+          if (regRes.requiresConfirmation) {
+            alert(regRes.message);
+            routeTo('/login');
           } else {
-            alert('Create Account Failed: ' + regRes.message);
+            showToast(`Account created! Welcome to GODSPEED HQ, ${name}.`);
+            const perms = store.getUserPermissions();
+            routeTo(perms.defaultRoute || '/dashboard');
           }
-        } catch (err) {
-          console.error('Sign up error:', err);
-          alert('An unexpected error occurred during account creation: ' + (err.message || err));
-        } finally {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalBtnHtml;
-          }
+        } else {
+          alert('Create Account Failed: ' + regRes.message);
         }
+      } catch (err) {
+        console.error('Sign up unexpected error:', err);
+        alert('Account creation error: ' + (err.message || err));
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnHtml;
+        }
+      }
+    }
+
+    if (formPublicSignup) {
+      formPublicSignup.addEventListener('submit', handleSignupExecution);
+    }
+
+    const btnSubmitSignup = document.getElementById('btn-submit-signup');
+    if (btnSubmitSignup) {
+      btnSubmitSignup.addEventListener('click', (e) => {
+        // If button is inside form, submit event handles it; otherwise invoke directly
+        if (!formPublicSignup) handleSignupExecution(e);
       });
     }
 
@@ -286,18 +312,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Permission Boundary Router */
   function routeTo(targetRoute) {
-    // Unauthenticated Public Routes
-    if (!store.isAuthenticated) {
-      if (targetRoute !== '/' && targetRoute !== '/login' && targetRoute !== '/signup') {
-        targetRoute = '/';
-      }
-
+    // Explicit Public Routes Handling
+    if (targetRoute === '/signup') {
       if (viewMemberPortal) viewMemberPortal.style.display = 'none';
-      if (viewPublicLanding) viewPublicLanding.style.display = targetRoute === '/' ? 'flex' : 'none';
-      if (viewPublicLogin) viewPublicLogin.style.display = targetRoute === '/login' ? 'flex' : 'none';
-      if (viewPublicSignup) viewPublicSignup.style.display = targetRoute === '/signup' ? 'flex' : 'none';
+      if (viewPublicLanding) viewPublicLanding.style.display = 'none';
+      if (viewPublicLogin) viewPublicLogin.style.display = 'none';
+      if (viewPublicSignup) viewPublicSignup.style.display = 'flex';
+      currentRoute = '/signup';
+      return;
+    }
 
-      currentRoute = targetRoute;
+    if (targetRoute === '/login') {
+      if (viewMemberPortal) viewMemberPortal.style.display = 'none';
+      if (viewPublicLanding) viewPublicLanding.style.display = 'none';
+      if (viewPublicSignup) viewPublicSignup.style.display = 'none';
+      if (viewPublicLogin) viewPublicLogin.style.display = 'flex';
+      currentRoute = '/login';
+      return;
+    }
+
+    if (targetRoute === '/') {
+      if (viewMemberPortal) viewMemberPortal.style.display = 'none';
+      if (viewPublicLogin) viewPublicLogin.style.display = 'none';
+      if (viewPublicSignup) viewPublicSignup.style.display = 'none';
+      if (viewPublicLanding) viewPublicLanding.style.display = 'flex';
+      currentRoute = '/';
+      return;
+    }
+
+    // Unauthenticated user attempting to access private routes
+    if (!store.isAuthenticated) {
+      if (viewMemberPortal) viewMemberPortal.style.display = 'none';
+      if (viewPublicLogin) viewPublicLogin.style.display = 'none';
+      if (viewPublicSignup) viewPublicSignup.style.display = 'none';
+      if (viewPublicLanding) viewPublicLanding.style.display = 'flex';
+      currentRoute = '/';
       return;
     }
 

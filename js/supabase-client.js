@@ -24,46 +24,89 @@ if (typeof supabase !== 'undefined') {
   console.warn('GODSPEED HQ: Supabase JS library not loaded.');
 }
 
-// Real Supabase Auth Helpers
+// Real Supabase Auth Helpers with Timeout Protection
 window.supabaseAuth = {
   async signUpUser(email, password, fullName, phone, sponsor, office) {
-    if (!window.godspeedSupabase) return { error: { message: 'Supabase client unavailable' } };
-    return await window.godspeedSupabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          phone: phone,
-          sponsor: sponsor || '',
-          office: office || 'HQ-AKR'
+    if (!window.godspeedSupabase) {
+      console.error('Supabase client is not initialized');
+      return { error: { message: 'Supabase client library not loaded. Check internet connection.' } };
+    }
+
+    try {
+      console.log('Sending signUp request for:', email);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Network request timed out after 12s. Please check your network connection.')), 12000)
+      );
+
+      const signUpPromise = window.godspeedSupabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            phone: phone,
+            sponsor: sponsor || '',
+            office: office || 'HQ-AKR'
+          }
         }
-      }
-    });
+      });
+
+      return await Promise.race([signUpPromise, timeoutPromise]);
+    } catch (err) {
+      console.error('signUpUser error:', err);
+      return { error: { message: err.message || 'Signup request failed' } };
+    }
   },
 
   async signInUser(email, password) {
-    if (!window.godspeedSupabase) return { error: { message: 'Supabase client unavailable' } };
-    return await window.godspeedSupabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    if (!window.godspeedSupabase) {
+      return { error: { message: 'Supabase client library not loaded. Check internet connection.' } };
+    }
+
+    try {
+      console.log('Sending signIn request for:', email);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Network request timed out after 12s. Please check your network connection.')), 12000)
+      );
+
+      const signInPromise = window.godspeedSupabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      return await Promise.race([signInPromise, timeoutPromise]);
+    } catch (err) {
+      console.error('signInUser error:', err);
+      return { error: { message: err.message || 'Sign in request failed' } };
+    }
   },
 
   async signOutUser() {
     if (!window.godspeedSupabase) return { error: null };
-    return await window.godspeedSupabase.auth.signOut();
+    try {
+      return await window.godspeedSupabase.auth.signOut();
+    } catch (err) {
+      return { error: err };
+    }
   },
 
   async getSupabaseSession() {
     if (!window.godspeedSupabase) return { data: { session: null } };
-    return await window.godspeedSupabase.auth.getSession();
+    try {
+      return await window.godspeedSupabase.auth.getSession();
+    } catch (err) {
+      return { data: { session: null }, error: err };
+    }
   },
 
   onAuthChange(callback) {
     if (!window.godspeedSupabase) return;
-    window.godspeedSupabase.auth.onAuthStateChange((event, session) => {
-      callback(event, session);
-    });
+    try {
+      window.godspeedSupabase.auth.onAuthStateChange((event, session) => {
+        callback(event, session);
+      });
+    } catch (err) {
+      console.warn('onAuthChange error:', err);
+    }
   }
 };
