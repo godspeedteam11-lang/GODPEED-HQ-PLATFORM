@@ -56,10 +56,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDashboardSwitcher();
     setupSupabaseAuthListener();
 
+    // Ensure session is synchronized before checking permissions
+    await store.syncSupabaseSession();
+
     // Check existing auth session state
     if (store.isAuthenticated && store.currentUserId) {
       const perms = store.getUserPermissions();
-      routeTo(perms.defaultRoute);
+      routeTo(perms.defaultRoute || '/dashboard');
     } else {
       routeTo('/');
     }
@@ -72,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event === 'SIGNED_IN' && session) {
           store.syncSupabaseSession().then(() => {
             const perms = store.getUserPermissions();
-            routeTo(perms.defaultRoute);
+            routeTo(perms.defaultRoute || '/dashboard');
           });
         } else if (event === 'SIGNED_OUT') {
           routeTo('/');
@@ -98,6 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (formPublicLogin) {
       formPublicLogin.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const submitBtn = formPublicLogin.querySelector('button[type="submit"]');
+        const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '<i class="fas fa-sign-in-alt"></i> Sign In';
+
         const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value;
 
@@ -106,12 +112,29 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
-        const authRes = await store.authenticateUser(email, password);
-        if (authRes.success) {
-          showToast(`Welcome back, ${authRes.member.name}!`);
-          routeTo(authRes.permissions.defaultRoute);
-        } else {
-          alert('Sign In Failed: ' + authRes.message);
+        try {
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+          }
+
+          const authRes = await store.authenticateUser(email, password);
+          if (authRes.success) {
+            const memberName = (authRes.member && authRes.member.name) ? authRes.member.name : 'Member';
+            showToast(`Welcome back, ${memberName}!`);
+            const targetRoute = (authRes.permissions && authRes.permissions.defaultRoute) ? authRes.permissions.defaultRoute : '/dashboard';
+            routeTo(targetRoute);
+          } else {
+            alert('Sign In Failed: ' + authRes.message);
+          }
+        } catch (err) {
+          console.error('Sign in submit exception:', err);
+          alert('Sign In Failed: ' + (err.message || err));
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnHtml;
+          }
         }
       });
     }

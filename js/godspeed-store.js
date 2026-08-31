@@ -332,6 +332,43 @@ class GodspeedStore {
           this.currentMember = this.members.find(m => m.id === this.currentUserId) || null;
         }
       }
+
+      // Self-healing safeguard: If signed in user does not yet have a row in public.members
+      if (this.currentUserId && !this.currentMember) {
+        const authUser = this.activeAuthUser;
+        const fallback = {
+          id: this.currentUserId,
+          member_code: 'GSD-' + this.currentUserId.substring(0, 6).toUpperCase(),
+          code: 'GSD-' + this.currentUserId.substring(0, 6).toUpperCase(),
+          full_name: authUser?.user_metadata?.full_name || (authUser?.email ? authUser.email.split('@')[0] : 'Member'),
+          name: authUser?.user_metadata?.full_name || (authUser?.email ? authUser.email.split('@')[0] : 'Member'),
+          email: authUser?.email || '',
+          phone: authUser?.user_metadata?.phone || '',
+          role: 'member',
+          official_rank: 'newbie',
+          rank: 'newbie',
+          highest_achieved_rank: 'newbie',
+          primary_office_id: '33333333-3333-3333-3333-333333333333',
+          officeId: '33333333-3333-3333-3333-333333333333'
+        };
+        this.currentMember = this.normalizeMember(fallback);
+        if (!this.members.some(m => m.id === this.currentUserId)) {
+          this.members.push(this.currentMember);
+        }
+
+        // Asynchronously self-heal database profile row
+        window.godspeedSupabase.from('members').insert({
+          id: this.currentUserId,
+          member_code: this.currentMember.code,
+          full_name: this.currentMember.name,
+          email: this.currentMember.email,
+          phone: this.currentMember.phone,
+          role: 'member',
+          official_rank: 'newbie',
+          primary_office_id: '33333333-3333-3333-3333-333333333333'
+        }).then(() => {}).catch(() => {});
+      }
+
       if (attendanceRes.data) {
         this.attendanceLogs = attendanceRes.data.map(a => this.normalizeAttendance(a));
       }
@@ -448,13 +485,25 @@ class GodspeedStore {
     try {
       const { data, error } = await window.supabaseAuth.signInUser(email, password);
       if (error) {
-        return { success: false, message: error.message };
+        let msg = error.message;
+        if (error.message.toLowerCase().includes('email not confirmed')) {
+          msg = 'Your email address has not been confirmed yet. Please check your inbox or disable "Confirm email" under Authentication -> Providers -> Email in your Supabase project dashboard.';
+        } else if (error.message.toLowerCase().includes('invalid login credentials')) {
+          msg = 'Invalid email or password. If you do not have an account yet, please click "Create Account" below.';
+        }
+        return { success: false, message: msg };
       }
 
       if (data && data.user) {
         await this.syncSupabaseSession();
-        const member = this.getCurrentUser();
-        const perms = this.getUserPermissions(member ? member.id : data.user.id);
+        const member = this.getCurrentUser() || {
+          id: data.user.id,
+          name: data.user.user_metadata?.full_name || (data.user.email ? data.user.email.split('@')[0] : 'Member'),
+          email: data.user.email,
+          role: 'member',
+          rank: 'newbie'
+        };
+        const perms = this.getUserPermissions(data.user.id);
         return { success: true, member, permissions: perms };
       }
 
