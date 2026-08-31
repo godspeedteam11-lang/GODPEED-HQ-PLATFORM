@@ -1479,6 +1479,46 @@ class GodspeedStore {
       return { success: false, message: err.message };
     }
   }
+  /* Storage Upload Helpers matching RLS Policies */
+  async uploadOfficeAsset(officeId, file, fileName = 'logo.png') {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase client is offline.' };
+    try {
+      const filePath = `${officeId}/${fileName}`;
+      const { data, error } = await window.godspeedSupabase.storage
+        .from('office-assets')
+        .upload(filePath, file, { upsert: true });
+
+      if (error) return { success: false, message: error.message };
+
+      const { data: urlData } = window.godspeedSupabase.storage
+        .from('office-assets')
+        .getPublicUrl(filePath);
+
+      return { success: true, path: filePath, publicUrl: urlData.publicUrl };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async uploadMemberAvatar(memberId, file, fileName = 'avatar.png') {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase client is offline.' };
+    try {
+      const filePath = `${memberId}/${fileName}`;
+      const { data, error } = await window.godspeedSupabase.storage
+        .from('member-avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (error) return { success: false, message: error.message };
+
+      const { data: urlData } = window.godspeedSupabase.storage
+        .from('member-avatars')
+        .getPublicUrl(filePath);
+
+      return { success: true, path: filePath, publicUrl: urlData.publicUrl };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
 
   /* 4. Training Classes Management (SaaS Spec §1) */
   async createTrainingClass(classData) {

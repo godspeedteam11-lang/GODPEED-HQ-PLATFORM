@@ -1747,7 +1747,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const res = await window.attendanceEngine.verifyAndSubmitAttendance(member.id, targetOfficeId, coords, {
             qrVerified: qrVerified,
             faceVerified: faceVerified,
-            livenessPassed: livenessPassed
+            livenessPassed: livenessPassed,
+            snapshotData: snapshot
           });
 
           if (res.success) {

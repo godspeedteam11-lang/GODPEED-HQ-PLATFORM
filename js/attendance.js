@@ -218,7 +218,25 @@ class AttendanceVerificationEngine {
       const isCompliant = (isInsideGeofence === true) || (distanceMeters <= allowedRadius);
       const status = isCompliant ? 'success' : 'flagged';
 
-      // Step C: Insert into attendance_logs (Server trigger trg_check_attendance_duplicate enforces 24h rule)
+      // Step C: Upload Snapshot to Storage if present
+      let snapshotPath = null;
+      if (options.snapshotData) {
+        try {
+          const snapId = 'snap_' + Date.now();
+          const snapFilePath = `${officeId}/${memberId}/${snapId}.jpg`;
+          const snapBlob = await (await fetch(options.snapshotData)).blob();
+          const { error: uploadErr } = await window.godspeedSupabase.storage
+            .from('attendance-snapshots')
+            .upload(snapFilePath, snapBlob, { contentType: 'image/jpeg', upsert: true });
+          if (!uploadErr) {
+            snapshotPath = snapFilePath;
+          }
+        } catch (sErr) {
+          console.warn('Snapshot upload non-blocking notice:', sErr);
+        }
+      }
+
+      // Step D: Insert into attendance_logs (Server trigger trg_check_attendance_duplicate enforces 24h rule)
       const { data, error } = await window.godspeedSupabase
         .from('attendance_logs')
         .insert({
@@ -230,6 +248,7 @@ class AttendanceVerificationEngine {
           qr_verified: qrVerified,
           face_verified: faceVerified,
           liveness_passed: livenessPassed,
+          snapshot_url: snapshotPath,
           status: status
         })
         .select()
