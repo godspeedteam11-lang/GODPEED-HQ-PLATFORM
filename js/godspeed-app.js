@@ -57,13 +57,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCloseEarning = document.getElementById('btn-close-earning');
   const formAddEarning = document.getElementById('form-add-earning');
 
-  /* Tenant URL & Custom Slug Resolution (SaaS Spec §5) */
+  /* Tenant Subdomain & URL Slug Resolution (SaaS Spec §5) */
   function handleTenantUrlRouting() {
+    let slug = null;
+    let subAction = null;
+
+    // 1. Check Subdomain (e.g. akure.legacyosapp.com or akure.localhost)
+    const hostname = window.location.hostname;
+    const parts = hostname.split('.');
+    if (parts.length >= 3 && !['app', 'www', 'api', 'admin', 'stage', 'preview'].includes(parts[0].toLowerCase())) {
+      slug = parts[0].toLowerCase();
+    }
+
+    // 2. Check / Fallback to Hash routing (e.g. #/o/:slug or #/o/:slug/join)
     const hash = window.location.hash || '';
     const match = hash.match(/^#\/o\/([^\/]+)(?:\/(join|login))?/);
     if (match) {
-      const slug = match[1];
-      const subAction = match[2];
+      slug = match[1].toLowerCase();
+      subAction = match[2];
+    }
+
+    if (slug) {
       const office = store.resolveOfficeBySlug(slug);
       if (office) {
         // Apply dynamic tenant branding colors
@@ -72,6 +86,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (office.secondaryBrandColor) {
           document.documentElement.style.setProperty('--accent-secondary', office.secondaryBrandColor);
+        }
+
+        // Apply tenant logo if present
+        if (office.logoUrl) {
+          const brandLogos = document.querySelectorAll('.public-brand .brand-logo, .brand-header .brand-logo');
+          brandLogos.forEach(logoEl => {
+            logoEl.innerHTML = `<img src="${escapeHTML(office.logoUrl)}" alt="${escapeHTML(office.name)}" style="width:100%; height:100%; object-fit:contain; border-radius:inherit;">`;
+          });
         }
 
         // Update WhatsApp support button
@@ -99,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
           routeTo('/login');
           return true;
         }
+        return true;
       }
     }
     return false;
