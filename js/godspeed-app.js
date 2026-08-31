@@ -1134,26 +1134,56 @@ document.addEventListener('DOMContentLoaded', () => {
     // Complete Self Attendance Submission
     if (btnSubmitAttendance) {
       btnSubmitAttendance.addEventListener('click', async () => {
-        const member = store.getCurrentUser();
+        const activeStore = getStore();
+        const member = activeStore ? activeStore.getCurrentUser() : null;
         if (!member) return;
 
-        const officeId = qrScannedOfficeId || member.primary_office_id || member.officeId || (store.offices[0] ? store.offices[0].id : '33333333-3333-3333-3333-333333333333');
-        const coords = capturedGps || { latitude: 7.2571, longitude: 5.2058, accuracy: 10 };
+        const targetOfficeId = member.primary_office_id || member.officeId || (activeStore.offices[0] ? activeStore.offices[0].id : '33333333-3333-3333-3333-333333333333');
+        const targetOffice = activeStore.offices.find(o => o.id === targetOfficeId || o.code === targetOfficeId);
+
+        // 1. qrVerified: True ONLY if qrScannedOfficeId is truthy AND matches the office being checked into
+        const isQrMatch = Boolean(
+          qrScannedOfficeId && targetOffice && 
+          (qrScannedOfficeId === targetOffice.id || 
+           qrScannedOfficeId === targetOffice.code || 
+           qrScannedOfficeId.toUpperCase().includes(targetOffice.code.toUpperCase()) || 
+           qrScannedOfficeId.includes(targetOffice.id))
+        );
+        const qrVerified = isQrMatch;
 
         btnSubmitAttendance.disabled = true;
-        btnSubmitAttendance.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying Server Geofence...';
+        btnSubmitAttendance.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying Camera & Geofence...';
 
         try {
-          // Capture camera snapshot
+          // 2. Real optical liveness check and face snapshot capture
+          let faceVerified = false;
+          let livenessPassed = false;
           let snapshot = null;
+
           if (window.attendanceEngine) {
-            snapshot = window.attendanceEngine.captureSnapshot(videoElem, canvasElem);
+            const livenessRes = await window.attendanceEngine.verifyLiveness(videoElem, canvasElem);
+            snapshot = livenessRes.snapshot;
+            faceVerified = Boolean(snapshot);
+            livenessPassed = Boolean(livenessRes.passed);
+
+            const livenessBadge = document.getElementById('liveness-badge');
+            if (livenessBadge) {
+              if (livenessPassed) {
+                livenessBadge.className = 'badge badge-green';
+                livenessBadge.innerHTML = '<i class="fas fa-check-circle"></i> Live Face Verified';
+              } else {
+                livenessBadge.className = 'badge badge-amber';
+                livenessBadge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Liveness Unverified';
+              }
+            }
           }
 
-          const res = await window.attendanceEngine.verifyAndSubmitAttendance(member.id, officeId, coords, {
-            qrVerified: Boolean(qrScannedOfficeId || true),
-            faceVerified: Boolean(snapshot || true),
-            livenessPassed: true
+          const coords = capturedGps || { latitude: 7.2571, longitude: 5.2058, accuracy: 10 };
+
+          const res = await window.attendanceEngine.verifyAndSubmitAttendance(member.id, targetOfficeId, coords, {
+            qrVerified: qrVerified,
+            faceVerified: faceVerified,
+            livenessPassed: livenessPassed
           });
 
           if (res.success) {

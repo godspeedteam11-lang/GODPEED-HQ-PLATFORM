@@ -93,6 +93,60 @@ class AttendanceVerificationEngine {
     return canvasElement.toDataURL('image/jpeg', 0.8);
   }
 
+  /* Real Frame-Difference Facial Motion / Liveness Check */
+  async verifyLiveness(videoElement, canvasElement) {
+    if (!videoElement || !canvasElement || !this.videoStream) {
+      return { passed: false, snapshot: null, reason: 'Camera stream unavailable' };
+    }
+
+    try {
+      const ctx = canvasElement.getContext('2d');
+      const w = 160;
+      const h = 120;
+      canvasElement.width = w;
+      canvasElement.height = h;
+
+      // Frame 1
+      ctx.drawImage(videoElement, 0, 0, w, h);
+      const frame1 = ctx.getImageData(0, 0, w, h);
+
+      // Wait 350ms to capture natural micro-motion/blinking
+      await new Promise(resolve => setTimeout(resolve, 350));
+
+      // Frame 2
+      ctx.drawImage(videoElement, 0, 0, w, h);
+      const frame2 = ctx.getImageData(0, 0, w, h);
+      const snapshot = canvasElement.toDataURL('image/jpeg', 0.8);
+
+      // Optical difference algorithm
+      let diff = 0;
+      let totalLum = 0;
+      const totalPixels = w * h;
+      for (let i = 0; i < frame1.data.length; i += 4) {
+        const lum1 = 0.299 * frame1.data[i] + 0.587 * frame1.data[i+1] + 0.114 * frame1.data[i+2];
+        const lum2 = 0.299 * frame2.data[i] + 0.587 * frame2.data[i+1] + 0.114 * frame2.data[i+2];
+        diff += Math.abs(lum1 - lum2);
+        totalLum += lum2;
+      }
+
+      const avgDiff = diff / totalPixels;
+      const avgLum = totalLum / totalPixels;
+
+      // Live human presence requires detectable micro-motion (avgDiff > 0.8) and non-dark exposure (avgLum > 15)
+      const passed = avgDiff > 0.8 && avgLum > 15;
+      return {
+        passed,
+        snapshot,
+        motionDelta: avgDiff,
+        luminosity: avgLum
+      };
+    } catch (err) {
+      console.warn('Liveness verification exception:', err);
+      const snap = this.captureSnapshot(videoElement, canvasElement);
+      return { passed: false, snapshot: snap, reason: err.message };
+    }
+  }
+
   /* 3. Real High-Accuracy GPS Geolocation */
   async getGpsCoordinates() {
     if (!navigator.geolocation) {
@@ -131,7 +185,7 @@ class AttendanceVerificationEngine {
       return { success: false, message: 'Supabase client is not connected.' };
     }
 
-    const { qrVerified = true, faceVerified = true, livenessPassed = true } = options;
+    const { qrVerified = false, faceVerified = false, livenessPassed = false } = options;
 
     try {
       // Step A: Call Server-Side validate_geofence RPC
