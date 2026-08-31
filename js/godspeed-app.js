@@ -57,6 +57,53 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCloseEarning = document.getElementById('btn-close-earning');
   const formAddEarning = document.getElementById('form-add-earning');
 
+  /* Tenant URL & Custom Slug Resolution (SaaS Spec §5) */
+  function handleTenantUrlRouting() {
+    const hash = window.location.hash || '';
+    const match = hash.match(/^#\/o\/([^\/]+)(?:\/(join|login))?/);
+    if (match) {
+      const slug = match[1];
+      const subAction = match[2];
+      const office = store.resolveOfficeBySlug(slug);
+      if (office) {
+        // Apply dynamic tenant branding colors
+        if (office.primaryBrandColor) {
+          document.documentElement.style.setProperty('--accent-primary', office.primaryBrandColor);
+        }
+        if (office.secondaryBrandColor) {
+          document.documentElement.style.setProperty('--accent-secondary', office.secondaryBrandColor);
+        }
+
+        // Update WhatsApp support button
+        const waBtn = document.getElementById('legacyos-whatsapp-floating-btn');
+        if (waBtn && office.whatsappNumber) {
+          const cleanPhone = office.whatsappNumber.replace(/[^0-9]/g, '');
+          waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello ${office.name} Support, I need assistance.`)}`;
+        }
+
+        // Set signup office select to current tenant office
+        const signupOfficeSelect = document.getElementById('signup-office');
+        if (signupOfficeSelect) {
+          let opt = Array.from(signupOfficeSelect.options).find(o => o.value === office.code || o.value === office.id || o.value === office.slug);
+          if (!opt) {
+            opt = new Option(office.name, office.id, true, true);
+            signupOfficeSelect.add(opt);
+          }
+          signupOfficeSelect.value = opt.value;
+        }
+
+        if (subAction === 'join') {
+          routeTo('/signup');
+          return true;
+        } else if (subAction === 'login') {
+          routeTo('/login');
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /* Application Initialization */
   async function init() {
     setupPublicAuthEvents();
@@ -66,8 +113,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDashboardSwitcher();
     setupSupabaseAuthListener();
 
+    window.addEventListener('hashchange', handleTenantUrlRouting);
+
     // Ensure session is synchronized before checking permissions
     await store.syncSupabaseSession();
+
+    // Check if URL has tenant slug routing
+    const routedTenant = handleTenantUrlRouting();
+    if (routedTenant) return;
 
     // Check existing auth session state
     if (store.isAuthenticated && store.currentUserId) {
@@ -311,6 +364,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (navSectionTeam) navSectionTeam.style.display = perms.canAccessTeam ? 'block' : 'none';
     if (navSectionLeader) navSectionLeader.style.display = perms.canAccessOffice ? 'block' : 'none';
+
+    const navSectionNetwork = document.getElementById('nav-section-network');
+    const isDirectorOrHigher = ['director', 'emerald_director', 'ruby_director', 'diamond_director'].includes(perms.member?.rank) || 
+      perms.isSuperAdmin || 
+      store.directorNetworks.some(n => n.directorId === store.currentUserId);
+    if (navSectionNetwork) navSectionNetwork.style.display = isDirectorOrHigher ? 'block' : 'none';
 
     document.querySelectorAll('.nav-link').forEach(link => {
       const linkRoute = link.getAttribute('data-route') || link.getAttribute('data-tab');
@@ -613,6 +672,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (viewTitle) {
       const titleMap = {
+        'leaderboard': 'Live Earnings Leaderboard',
+        'training': 'Training & Member Progression Management',
+        'network': 'World Team Director Multi-Office Network',
+        'office-settings': 'Office Settings & Custom Tenant Branding',
         'genealogy': 'Genealogy & Team Tree Inspector',
         'attendance': 'GPS & QR Attendance Audit Log',
         'pv': 'NeoLife PV Submissions & Carriage State Machine',
@@ -625,7 +688,28 @@ document.addEventListener('DOMContentLoaded', () => {
       viewTitle.innerText = titleMap[tabName] || 'GODSPEED HQ';
     }
 
-    if (tabName === 'attendance') renderAttendancePane();
+    if (viewSubtitle) {
+      const subtitleMap = {
+        'leaderboard': 'Real-time earnings rankings computed from verified ledger entries across offices',
+        'training': 'Curriculum stages, module completion, tutor assignments, and session attendance',
+        'network': 'Cross-office oversight, network-wide attendance, and earnings rollup for Directors',
+        'office-settings': 'Manage office identity, web address slug, logo, colors, and 30-day trial status',
+        'attendance': 'Cryptographically verified GPS geofence and QR code attendance logs',
+        'pv': 'NeoLife order verification, PV point validation, and physical carriage receipts',
+        'freelance': '10/20/70 freelance revenue split and automatic office dues calculation',
+        'dues': 'Track membership and operational dues status and payment history',
+        'health': 'Automated attendance and activity health scoring to flag at-risk members',
+        'chat': 'Direct communication across upline and office teams',
+        'notice': 'Official bulletins and community announcements'
+      };
+      viewSubtitle.innerText = subtitleMap[tabName] || '';
+    }
+
+    if (tabName === 'leaderboard') renderLiveLeaderboard();
+    else if (tabName === 'training') renderTrainingPane();
+    else if (tabName === 'network') renderDirectorNetworkPane();
+    else if (tabName === 'office-settings') renderOfficeSettingsPane();
+    else if (tabName === 'attendance') renderAttendancePane();
     else if (tabName === 'pv') renderPVPane();
     else if (tabName === 'freelance') renderFreelancePane();
     else if (tabName === 'dues') renderDuesPane();
@@ -965,22 +1049,475 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Moderation Handlers
-    pane.querySelectorAll('.btn-moderate-chat').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const msgId = e.currentTarget.getAttribute('data-msg-id');
-        const reason = prompt('Enter moderation reason:');
-        if (reason && reason.trim()) {
-          const res = await store.moderateMessage(msgId, reason.trim());
-          if (res.success) {
-            showToast('Message moderated.');
-            renderChatPane();
-          } else {
-            alert('Moderation failed: ' + res.message);
-          }
-        }
-      });
+  /* RENDER SAAS 1: LIVE EARNINGS LEADERBOARD (PRD & SaaS Spec §2) */
+  function renderLiveLeaderboard() {
+    const timeframeSel = document.getElementById('leaderboard-filter-timeframe');
+    const scopeSel = document.getElementById('leaderboard-filter-scope');
+    const timeframe = timeframeSel ? timeframeSel.value : 'this_month';
+    const scope = scopeSel ? scopeSel.value : 'current_office';
+
+    const data = store.getLeaderboardData(timeframe, scope);
+    const podiumContainer = document.getElementById('leaderboard-podium-container');
+    const tbody = document.getElementById('leaderboard-table-body');
+
+    // 1. Render Top 3 Podium
+    if (podiumContainer) {
+      if (data.top3.length === 0) {
+        podiumContainer.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align:center; padding:2rem; background:rgba(255,255,255,0.02); border:1px dashed var(--border-color); border-radius:var(--radius-md);">
+            <i class="fas fa-trophy" style="font-size:2rem; color:var(--text-muted); margin-bottom:0.75rem; display:block;"></i>
+            <h4 style="color:#fff; margin-bottom:0.25rem;">No Verified Earnings Recorded</h4>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Record verified freelance earnings to compete on the leaderboard!</p>
+          </div>
+        `;
+      } else {
+        const medals = [
+          { rank: 1, color: '#f59e0b', title: '1st Place • Gold', icon: 'fa-crown', bg: 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%)' },
+          { rank: 2, color: '#94a3b8', title: '2nd Place • Silver', icon: 'fa-medal', bg: 'linear-gradient(135deg, rgba(148,163,184,0.15) 0%, rgba(148,163,184,0.05) 100%)' },
+          { rank: 3, color: '#d97706', title: '3rd Place • Bronze', icon: 'fa-award', bg: 'linear-gradient(135deg, rgba(217,119,6,0.15) 0%, rgba(217,119,6,0.05) 100%)' }
+        ];
+
+        podiumContainer.innerHTML = data.top3.map((earner, idx) => {
+          const medal = medals[idx] || medals[2];
+          const isMe = earner.memberId === store.currentUserId;
+          return `
+            <div style="background:${medal.bg}; border:1px solid ${medal.color}44; border-radius:var(--radius-md); padding:1.25rem; position:relative; box-shadow:0 8px 24px rgba(0,0,0,0.2);">
+              <div style="position:absolute; top:12px; right:12px; font-size:0.75rem; font-weight:700; color:${medal.color}; background:${medal.color}22; padding:0.25rem 0.5rem; border-radius:999px; border:1px solid ${medal.color}44;">
+                <i class="fas ${medal.icon}"></i> ${medal.title}
+              </div>
+              <div style="display:flex; align-items:center; gap:0.85rem; margin-bottom:1rem; margin-top:0.5rem;">
+                <div class="avatar" style="width:48px; height:48px; font-size:1.1rem; border:2px solid ${medal.color};">${earner.memberName.split(' ').map(n=>n[0]).join('')}</div>
+                <div>
+                  <h4 style="color:#fff; font-size:1.05rem; margin:0 0 0.15rem 0; font-weight:700;">
+                    ${escapeHTML(earner.memberName)}
+                    ${isMe ? '<span class="badge badge-green" style="font-size:0.65rem; margin-left:0.35rem;">YOU</span>' : ''}
+                  </h4>
+                  <span class="badge-rank" style="font-size:0.7rem;">${formatRank(earner.memberRank)}</span>
+                </div>
+              </div>
+              <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:0.75rem; display:flex; justify-content:space-between; align-items:baseline;">
+                <div>
+                  <div style="font-size:0.75rem; color:var(--text-muted);">Gross Revenue</div>
+                  <div style="font-size:1.35rem; font-weight:800; color:${medal.color};">₦${earner.totalGross.toLocaleString()}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:0.7rem; color:var(--text-muted);">10% Office Due</div>
+                  <div style="font-size:0.85rem; font-weight:600; color:var(--accent-secondary);">₦${earner.total10Due.toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 2. Render Full Table
+    if (tbody) {
+      if (data.leaderboard.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No leaderboard entries found for this filter.</td></tr>`;
+      } else {
+        tbody.innerHTML = data.leaderboard.map(row => {
+          const isMe = row.memberId === store.currentUserId;
+          const rankBadge = row.rankPosition === 1
+            ? '<span class="badge" style="background:#f59e0b; color:#000; font-weight:800;">#1 👑</span>'
+            : row.rankPosition === 2
+            ? '<span class="badge" style="background:#94a3b8; color:#000; font-weight:800;">#2 🥈</span>'
+            : row.rankPosition === 3
+            ? '<span class="badge" style="background:#d97706; color:#fff; font-weight:800;">#3 🥉</span>'
+            : `<span class="badge badge-blue">#${row.rankPosition}</span>`;
+
+          return `
+            <tr style="${isMe ? 'background:rgba(99,102,241,0.12); border-left:3px solid var(--accent-primary);' : ''}">
+              <td>${rankBadge}</td>
+              <td>
+                <div class="member-info-cell">
+                  <div class="avatar">${row.memberName.split(' ').map(n=>n[0]).join('')}</div>
+                  <div>
+                    <h5>${escapeHTML(row.memberName)} ${isMe ? '<span class="badge badge-green" style="font-size:0.65rem;">YOU</span>' : ''}</h5>
+                    <p>${row.memberCode}</p>
+                  </div>
+                </div>
+              </td>
+              <td><span class="badge-rank">${formatRank(row.memberRank)}</span></td>
+              <td style="font-weight:800; color:#fff;">₦${row.totalGross.toLocaleString()}</td>
+              <td style="font-weight:700; color:var(--status-green);">₦${row.totalNet.toLocaleString()}</td>
+              <td style="color:var(--accent-secondary);">₦${row.total10Due.toLocaleString()}</td>
+              <td>${row.entriesCount} logged</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+  }
+
+  /* RENDER SAAS 2: TRAINING & PROGRESSION MANAGEMENT (SaaS Spec §1) */
+  function renderTrainingPane() {
+    const classesGrid = document.getElementById('training-classes-grid');
+    const membersTbody = document.getElementById('training-members-table-body');
+    const sessionsContainer = document.getElementById('training-sessions-container');
+
+    // 1. Render Classes
+    if (classesGrid) {
+      if (store.trainingClasses.length === 0) {
+        classesGrid.innerHTML = `
+          <div style="grid-column:1 / -1; text-align:center; padding:2rem; background:rgba(255,255,255,0.02); border:1px dashed var(--border-color); border-radius:var(--radius-sm);">
+            <p style="color:var(--text-muted); margin:0;">No active training classes found. Click "Create Class" above to set up a new curriculum.</p>
+          </div>
+        `;
+      } else {
+        classesGrid.innerHTML = store.trainingClasses.map(c => {
+          const tutor = store.members.find(m => m.id === c.tutorId) || { name: 'Assigned Tutor' };
+          const head = store.members.find(m => m.id === c.headId) || { name: 'Training Head' };
+          const enrolledCount = store.trainingClassMembers.filter(m => m.classId === c.id).length;
+
+          return `
+            <div class="card-panel" style="background:var(--bg-card); border:1px solid var(--border-color); padding:1.25rem;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem;">
+                <h4 style="color:#fff; font-size:1.05rem; font-weight:700; margin:0;">${escapeHTML(c.name)}</h4>
+                <span class="badge badge-green">${enrolledCount} Enrolled</span>
+              </div>
+              <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;">${escapeHTML(c.description || 'Comprehensive training curriculum.')}</p>
+              
+              <div style="font-size:0.75rem; color:var(--text-dim); display:flex; flex-direction:column; gap:0.35rem; margin-bottom:1rem;">
+                <div><i class="fas fa-user-tie" style="color:var(--accent-primary); width:16px;"></i> Tutor: <strong>${escapeHTML(tutor.name)}</strong></div>
+                <div><i class="fas fa-user-shield" style="color:var(--accent-secondary); width:16px;"></i> Head: <strong>${escapeHTML(head.name)}</strong></div>
+                <div><i class="fas fa-clock" style="color:var(--status-blue); width:16px;"></i> ${escapeHTML(c.scheduleInfo)} • ${escapeHTML(c.locationInfo)}</div>
+              </div>
+
+              <button class="btn btn-secondary btn-sm btn-enroll-member-modal" data-class-id="${c.id}" data-class-name="${escapeHTML(c.name)}" style="width:100%;">
+                <i class="fas fa-user-plus"></i> Enroll Member
+              </button>
+            </div>
+          `;
+        }).join('');
+
+        // Attach Class Enroll Trigger
+        classesGrid.querySelectorAll('.btn-enroll-member-modal').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const classId = e.currentTarget.getAttribute('data-class-id');
+            const targetMemberId = prompt('Enter Member ID or Email to Enroll in this Class:');
+            if (targetMemberId && targetMemberId.trim()) {
+              const matchedMember = store.members.find(m => 
+                m.id === targetMemberId.trim() || 
+                m.member_code?.toLowerCase() === targetMemberId.trim().toLowerCase() ||
+                m.email?.toLowerCase() === targetMemberId.trim().toLowerCase()
+              );
+              const mId = matchedMember ? matchedMember.id : targetMemberId.trim();
+              const res = await store.enrollClassMember(classId, mId, 'Beginner');
+              if (res.success) {
+                showToast('Member successfully enrolled in class!');
+                renderTrainingPane();
+              } else {
+                alert('Enrollment failed: ' + res.message);
+              }
+            }
+          });
+        });
+      }
+    }
+
+    // 2. Render Member Progression
+    if (membersTbody) {
+      if (store.trainingClassMembers.length === 0) {
+        membersTbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No members currently enrolled in training classes.</td></tr>`;
+      } else {
+        const stageColors = {
+          'Beginner': 'badge-blue',
+          'Foundation': 'badge-purple',
+          'Intermediate': 'badge-amber',
+          'Advanced': 'badge-green',
+          'Leadership': 'badge-pink'
+        };
+
+        membersTbody.innerHTML = store.trainingClassMembers.map(tm => {
+          const member = store.members.find(m => m.id === tm.memberId) || { name: tm.memberId, code: '' };
+          const tClass = store.trainingClasses.find(c => c.id === tm.classId) || { name: 'Class' };
+          const progressPercent = Math.min(100, Math.round(((tm.modulesCompleted || 0) / (tm.totalModules || 10)) * 100));
+
+          return `
+            <tr>
+              <td>
+                <div class="member-info-cell">
+                  <div class="avatar">${member.name.split(' ').map(n=>n[0]).join('')}</div>
+                  <div><h5>${escapeHTML(member.name)}</h5><p>${member.code || ''}</p></div>
+                </div>
+              </td>
+              <td>${escapeHTML(tClass.name)}</td>
+              <td>
+                <span class="badge ${stageColors[tm.stage] || 'badge-blue'}">${escapeHTML(tm.stage)}</span>
+              </td>
+              <td style="min-width:140px;">
+                <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-bottom:0.25rem;">
+                  <span>${tm.modulesCompleted || 0}/${tm.totalModules || 10} Modules</span>
+                  <strong>${progressPercent}%</strong>
+                </div>
+                <div style="width:100%; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden;">
+                  <div style="width:${progressPercent}%; height:100%; background:var(--accent-gradient);"></div>
+                </div>
+              </td>
+              <td><strong>${Number(tm.assessmentScore || 0).toFixed(1)}%</strong></td>
+              <td>${tm.lastTrainingDate || 'Pending'}</td>
+              <td>
+                <button class="btn btn-secondary btn-sm btn-edit-progression" 
+                  data-class-id="${tm.classId}" 
+                  data-member-id="${tm.memberId}" 
+                  data-member-name="${escapeHTML(member.name)}"
+                  data-class-name="${escapeHTML(tClass.name)}"
+                  data-stage="${tm.stage}"
+                  data-modules="${tm.modulesCompleted || 0}"
+                  data-score="${tm.assessmentScore || 0}"
+                  data-notes="${escapeHTML(tm.tutorNotes || '')}">
+                  <i class="fas fa-edit"></i> Update
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        // Attach Update Progression Modal Trigger
+        membersTbody.querySelectorAll('.btn-edit-progression').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const b = e.currentTarget;
+            document.getElementById('progress-class-id').value = b.getAttribute('data-class-id');
+            document.getElementById('progress-member-id').value = b.getAttribute('data-member-id');
+            document.getElementById('progress-member-name').innerText = b.getAttribute('data-member-name');
+            document.getElementById('progress-class-name').innerText = b.getAttribute('data-class-name');
+            document.getElementById('progress-stage-select').value = b.getAttribute('data-stage');
+            document.getElementById('progress-modules-completed').value = b.getAttribute('data-modules');
+            document.getElementById('progress-assessment-score').value = b.getAttribute('data-score');
+            document.getElementById('progress-tutor-notes').value = b.getAttribute('data-notes');
+            document.getElementById('modal-member-progress').classList.add('active');
+          });
+        });
+      }
+    }
+
+    // 3. Render Sessions
+    if (sessionsContainer) {
+      if (store.trainingSessions.length === 0) {
+        sessionsContainer.innerHTML = `
+          <div style="text-align:center; padding:1.5rem; background:rgba(255,255,255,0.02); border:1px dashed var(--border-color); border-radius:var(--radius-sm);">
+            <p style="color:var(--text-muted); margin:0;">No upcoming training sessions scheduled. Click "Schedule Session" to add one.</p>
+          </div>
+        `;
+      } else {
+        sessionsContainer.innerHTML = store.trainingSessions.map(s => {
+          const tClass = store.trainingClasses.find(c => c.id === s.classId) || { name: 'Class' };
+          const tutor = store.members.find(m => m.id === s.tutorId) || { name: 'Tutor' };
+
+          return `
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:1rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem;">
+                  <h5 style="color:#fff; font-size:0.95rem; margin:0; font-weight:700;">${escapeHTML(s.topic)}</h5>
+                  <span class="badge badge-purple">${escapeHTML(tClass.name)}</span>
+                </div>
+                <div style="font-size:0.8rem; color:var(--text-muted);">
+                  <i class="fas fa-calendar-day"></i> ${s.sessionDate} at ${s.startTime} • Tutor: <strong>${escapeHTML(tutor.name)}</strong>
+                </div>
+                ${s.notes ? `<div style="font-size:0.75rem; color:var(--text-dim); margin-top:0.25rem;">${escapeHTML(s.notes)}</div>` : ''}
+              </div>
+              <div>
+                <button class="btn btn-primary btn-sm btn-mark-session-att" data-session-id="${s.id}">
+                  <i class="fas fa-check-square"></i> Mark Attendance
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        sessionsContainer.querySelectorAll('.btn-mark-session-att').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const sId = e.currentTarget.getAttribute('data-session-id');
+            const targetMemberId = prompt('Enter Member ID or Email to record session attendance:');
+            if (targetMemberId && targetMemberId.trim()) {
+              const matchedMember = store.members.find(m => 
+                m.id === targetMemberId.trim() || 
+                m.member_code?.toLowerCase() === targetMemberId.trim().toLowerCase() ||
+                m.email?.toLowerCase() === targetMemberId.trim().toLowerCase()
+              );
+              const mId = matchedMember ? matchedMember.id : targetMemberId.trim();
+              const res = await store.recordTrainingAttendance(sId, mId, 'present');
+              if (res.success) {
+                showToast('Training session attendance recorded!');
+              } else {
+                alert('Failed to record attendance: ' + res.message);
+              }
+            }
+          });
+        });
+      }
+    }
+  }
+
+  /* RENDER SAAS 3: WORLD TEAM DIRECTOR MULTI-OFFICE NETWORK (SaaS Spec §3) */
+  function renderDirectorNetworkPane() {
+    const metricsRow = document.getElementById('director-network-metrics');
+    const linkedGrid = document.getElementById('director-linked-offices-grid');
+    const currentDirectorId = store.currentUserId;
+
+    // Director Networks owned by current user
+    const myNetworks = store.directorNetworks.filter(n => n.directorId === currentDirectorId);
+    const activeNetwork = myNetworks[0] || null;
+
+    // Linked office IDs
+    let linkedOfficeIds = [];
+    if (activeNetwork) {
+      linkedOfficeIds = store.networkOffices.filter(no => no.network_id === activeNetwork.id).map(no => no.office_id);
+    }
+
+    const linkedOffices = store.offices.filter(o => linkedOfficeIds.includes(o.id));
+    const totalOffices = linkedOffices.length;
+    const networkMembers = store.members.filter(m => linkedOfficeIds.includes(m.primary_office_id || m.officeId));
+    const totalMembers = networkMembers.length;
+
+    // Network Earnings
+    const networkEarnings = store.earningsLedger.filter(e => {
+      const m = store.members.find(mem => mem.id === e.memberId);
+      return m && linkedOfficeIds.includes(m.primary_office_id || m.officeId);
     });
+    const totalNetworkRevenue = networkEarnings.reduce((sum, e) => sum + Number(e.gross || e.grossAmount || 0), 0);
+
+    // 1. Render Metrics
+    if (metricsRow) {
+      metricsRow.innerHTML = `
+        <div class="metric-box">
+          <div class="metric-title"><span>Network Hubs</span><i class="fas fa-network-wired" style="color:var(--accent-primary)"></i></div>
+          <div class="metric-number" style="color:var(--accent-primary)">${totalOffices}</div>
+          <div class="metric-sub">${activeNetwork ? activeNetwork.name : 'No Active Director Network'}</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-title"><span>Network Active Roster</span><i class="fas fa-users" style="color:var(--status-blue)"></i></div>
+          <div class="metric-number" style="color:var(--status-blue)">${totalMembers}</div>
+          <div class="metric-sub">Across all linked hubs</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-title"><span>Combined Network Gross</span><i class="fas fa-trophy" style="color:var(--status-green)"></i></div>
+          <div class="metric-number" style="color:var(--status-green)">₦${totalNetworkRevenue.toLocaleString()}</div>
+          <div class="metric-sub">Aggregated gross revenue</div>
+        </div>
+      `;
+    }
+
+    // 2. Render Linked Offices Grid
+    if (linkedGrid) {
+      if (linkedOffices.length === 0) {
+        linkedGrid.innerHTML = `
+          <div style="grid-column:1 / -1; text-align:center; padding:2rem; background:rgba(255,255,255,0.02); border:1px dashed var(--border-color); border-radius:var(--radius-sm);">
+            <i class="fas fa-building" style="font-size:2rem; color:var(--text-muted); margin-bottom:0.75rem; display:block;"></i>
+            <h4 style="color:#fff; margin-bottom:0.25rem;">No Linked Offices in Network</h4>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">Link downstream Director and Team Leader offices to monitor multi-office operations in real-time.</p>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('modal-link-office').classList.add('active')">
+              <i class="fas fa-link"></i> Link First Office
+            </button>
+          </div>
+        `;
+      } else {
+        linkedGrid.innerHTML = linkedOffices.map(o => {
+          const officeMembers = store.members.filter(m => (m.primary_office_id === o.id || m.officeId === o.id));
+          const officeLogs = store.attendanceLogs.filter(a => a.officeId === o.id);
+          const trialEnd = new Date(o.trialEndAt || o.trial_end_at || Date.now() + 30*24*60*60*1000);
+          const daysLeft = Math.max(0, Math.ceil((trialEnd - Date.now()) / (1000*60*60*24)));
+
+          return `
+            <div class="card-panel" style="background:var(--bg-card); border:1px solid var(--border-color); padding:1.25rem;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem;">
+                <div>
+                  <h4 style="color:#fff; font-size:1.1rem; font-weight:700; margin:0 0 0.2rem 0;">${escapeHTML(o.name)}</h4>
+                  <span style="font-size:0.75rem; color:var(--accent-primary); font-weight:600;">/${o.slug}</span>
+                </div>
+                <span class="badge ${daysLeft > 0 ? 'badge-green' : 'badge-red'}">${daysLeft > 0 ? `${daysLeft}d Trial` : 'Active'}</span>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin:1rem 0; font-size:0.8rem; background:rgba(255,255,255,0.02); padding:0.75rem; border-radius:6px;">
+                <div>
+                  <div style="color:var(--text-muted); font-size:0.7rem;">Roster Size</div>
+                  <strong style="color:#fff;">${officeMembers.length} Members</strong>
+                </div>
+                <div>
+                  <div style="color:var(--text-muted); font-size:0.7rem;">Attendances</div>
+                  <strong style="color:var(--status-green);">${officeLogs.length} Checked In</strong>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-secondary btn-sm btn-unlink-office" data-network-id="${activeNetwork?.id}" data-office-id="${o.id}" style="width:100%; color:var(--status-red);">
+                  <i class="fas fa-unlink"></i> Unlink Office
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        linkedGrid.querySelectorAll('.btn-unlink-office').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const netId = e.currentTarget.getAttribute('data-network-id');
+            const offId = e.currentTarget.getAttribute('data-office-id');
+            if (confirm('Are you sure you want to unlink this office from your Director Network?')) {
+              const res = await store.unlinkOfficeFromNetwork(netId, offId);
+              if (res.success) {
+                showToast('Office unlinked successfully.');
+                renderDirectorNetworkPane();
+              } else {
+                alert('Failed to unlink office: ' + res.message);
+              }
+            }
+          });
+        });
+      }
+    }
+  }
+
+  /* RENDER SAAS 4: OFFICE SETTINGS & BRANDING (SaaS Spec §6 & §10) */
+  function renderOfficeSettingsPane() {
+    const activeOfficeId = store.currentMember?.primary_office_id || store.currentMember?.officeId || store.offices[0]?.id;
+    const office = store.offices.find(o => o.id === activeOfficeId) || store.offices[0];
+    if (!office) return;
+
+    // Populate Fields
+    const inputName = document.getElementById('setting-office-name');
+    const inputSlug = document.getElementById('setting-office-slug');
+    const inputDesc = document.getElementById('setting-office-desc');
+    const inputLogo = document.getElementById('setting-office-logo');
+    const inputWhatsapp = document.getElementById('setting-office-whatsapp');
+    const inputPColor = document.getElementById('setting-office-primary-color');
+    const inputSColor = document.getElementById('setting-office-secondary-color');
+    const urlPreview = document.getElementById('setting-office-url-preview');
+    const copyJoinUrl = document.getElementById('setting-copy-join-url');
+
+    if (inputName) inputName.value = office.name || '';
+    if (inputSlug) inputSlug.value = office.slug || '';
+    if (inputDesc) inputDesc.value = office.description || '';
+    if (inputLogo) inputLogo.value = office.logoUrl || office.logo_url || '';
+    if (inputWhatsapp) inputWhatsapp.value = office.whatsappNumber || office.whatsapp_number || '';
+    if (inputPColor) inputPColor.value = office.primaryBrandColor || office.primary_brand_color || '#6366f1';
+    if (inputSColor) inputSColor.value = office.secondaryBrandColor || office.secondary_brand_color || '#8b5cf6';
+
+    const joinUrl = `${window.location.origin}${window.location.pathname}#/o/${office.slug}/join`;
+    if (urlPreview) urlPreview.innerText = `app.legacyosapp.com/#/o/${office.slug}`;
+    if (copyJoinUrl) copyJoinUrl.value = joinUrl;
+
+    // Subscription & 30-Day Trial Status
+    const trialEnd = new Date(office.trialEndAt || office.trial_end_at || (Date.now() + 30*24*60*60*1000));
+    const daysLeft = Math.max(0, Math.ceil((trialEnd - Date.now()) / (1000*60*60*24)));
+    const trialDaysElem = document.getElementById('office-trial-days');
+    const planNameElem = document.getElementById('office-plan-name');
+    const memberLimitText = document.getElementById('office-member-limit-text');
+    const memberLimitBar = document.getElementById('office-member-limit-bar');
+
+    if (trialDaysElem) trialDaysElem.innerText = `${daysLeft} Days Remaining`;
+    if (planNameElem) {
+      planNameElem.innerText = office.subscriptionPlanId?.includes('growth') 
+        ? 'Growth Plan (₦18,000/mo - Unlimited)' 
+        : 'Starter Plan (₦7,500/mo - Up to 49 Members)';
+    }
+
+    const officeMembers = store.members.filter(m => (m.primary_office_id === office.id || m.officeId === office.id));
+    const limit = office.memberLimit || office.member_limit || 49;
+    const usagePercent = Math.min(100, Math.round((officeMembers.length / limit) * 100));
+
+    if (memberLimitText) memberLimitText.innerText = `${officeMembers.length} / ${limit >= 999999 ? 'Unlimited' : limit} Members`;
+    if (memberLimitBar) memberLimitBar.style.width = `${usagePercent}%`;
   }
 
   /* Global Event Listeners setup */
@@ -1249,6 +1786,225 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             alert('Failed to record earning: ' + res.message);
           }
+        }
+      });
+    }
+
+    // =========================================================================
+    // LEGACYOS SAAS EVENT LISTENERS
+    // =========================================================================
+
+    // 1. Live Leaderboard Filters
+    const lbTimeframe = document.getElementById('leaderboard-filter-timeframe');
+    const lbScope = document.getElementById('leaderboard-filter-scope');
+    if (lbTimeframe) lbTimeframe.addEventListener('change', () => renderLiveLeaderboard());
+    if (lbScope) lbScope.addEventListener('change', () => renderLiveLeaderboard());
+
+    // 2. Training: Create Class Modal & Form
+    const modalCreateClass = document.getElementById('modal-create-class');
+    const btnOpenCreateClass = document.getElementById('btn-open-create-class-modal');
+    const btnCloseCreateClass = document.getElementById('btn-close-create-class');
+    const formCreateClass = document.getElementById('form-create-class');
+    const tutorSelect = document.getElementById('class-tutor-select');
+    const headSelect = document.getElementById('class-head-select');
+
+    if (btnOpenCreateClass) {
+      btnOpenCreateClass.addEventListener('click', () => {
+        // Populate Members for Tutor & Head
+        const memberOpts = store.members.map(m => `<option value="${m.id}">${escapeHTML(m.name)} (${formatRank(m.rank)})</option>`).join('');
+        if (tutorSelect) tutorSelect.innerHTML = `<option value="">-- Select Tutor --</option>` + memberOpts;
+        if (headSelect) headSelect.innerHTML = `<option value="">-- Select Training Head --</option>` + memberOpts;
+        if (modalCreateClass) modalCreateClass.classList.add('active');
+      });
+    }
+    if (btnCloseCreateClass) btnCloseCreateClass.addEventListener('click', () => modalCreateClass?.classList.remove('active'));
+
+    if (formCreateClass) {
+      formCreateClass.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const activeOfficeId = store.currentMember?.primary_office_id || store.currentMember?.officeId || store.offices[0]?.id;
+        const classData = {
+          officeId: activeOfficeId,
+          name: document.getElementById('class-name').value,
+          description: document.getElementById('class-desc').value,
+          tutorId: document.getElementById('class-tutor-select').value || null,
+          headId: document.getElementById('class-head-select').value || null,
+          scheduleInfo: document.getElementById('class-schedule').value,
+          locationInfo: document.getElementById('class-location').value
+        };
+
+        const res = await store.createTrainingClass(classData);
+        if (res.success) {
+          formCreateClass.reset();
+          modalCreateClass?.classList.remove('active');
+          showToast('Training class created successfully!');
+          renderTrainingPane();
+        } else {
+          alert('Failed to create class: ' + res.message);
+        }
+      });
+    }
+
+    // 3. Training: Schedule Session Modal & Form
+    const modalScheduleSession = document.getElementById('modal-schedule-session');
+    const btnOpenScheduleSession = document.getElementById('btn-open-schedule-session-modal');
+    const btnCloseScheduleSession = document.getElementById('btn-close-schedule-session');
+    const formScheduleSession = document.getElementById('form-schedule-session');
+    const sessionClassSelect = document.getElementById('session-class-select');
+
+    if (btnOpenScheduleSession) {
+      btnOpenScheduleSession.addEventListener('click', () => {
+        if (sessionClassSelect) {
+          sessionClassSelect.innerHTML = store.trainingClasses.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+        }
+        const todayStr = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('session-date');
+        if (dateInput) dateInput.value = todayStr;
+        if (modalScheduleSession) modalScheduleSession.classList.add('active');
+      });
+    }
+    if (btnCloseScheduleSession) btnCloseScheduleSession.addEventListener('click', () => modalScheduleSession?.classList.remove('active'));
+
+    if (formScheduleSession) {
+      formScheduleSession.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const sessionData = {
+          classId: document.getElementById('session-class-select').value,
+          topic: document.getElementById('session-topic').value,
+          sessionDate: document.getElementById('session-date').value,
+          startTime: document.getElementById('session-time').value,
+          notes: document.getElementById('session-notes').value
+        };
+
+        const res = await store.createTrainingSession(sessionData);
+        if (res.success) {
+          formScheduleSession.reset();
+          modalScheduleSession?.classList.remove('active');
+          showToast('Training session scheduled!');
+          renderTrainingPane();
+        } else {
+          alert('Failed to schedule session: ' + res.message);
+        }
+      });
+    }
+
+    // 4. Training: Member Progression Form
+    const modalMemberProgress = document.getElementById('modal-member-progress');
+    const btnCloseMemberProgress = document.getElementById('btn-close-member-progress');
+    const formMemberProgress = document.getElementById('form-member-progress');
+
+    if (btnCloseMemberProgress) btnCloseMemberProgress.addEventListener('click', () => modalMemberProgress?.classList.remove('active'));
+
+    if (formMemberProgress) {
+      formMemberProgress.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const classId = document.getElementById('progress-class-id').value;
+        const memberId = document.getElementById('progress-member-id').value;
+        const progressData = {
+          stage: document.getElementById('progress-stage-select').value,
+          modulesCompleted: parseInt(document.getElementById('progress-modules-completed').value, 10) || 0,
+          assessmentScore: parseFloat(document.getElementById('progress-assessment-score').value) || 0,
+          tutorNotes: document.getElementById('progress-tutor-notes').value
+        };
+
+        const res = await store.updateMemberProgress(classId, memberId, progressData);
+        if (res.success) {
+          modalMemberProgress?.classList.remove('active');
+          showToast('Member curriculum progression updated!');
+          renderTrainingPane();
+        } else {
+          alert('Failed to update progression: ' + res.message);
+        }
+      });
+    }
+
+    // 5. Director Network: Link Office Modal & Form
+    const modalLinkOffice = document.getElementById('modal-link-office');
+    const btnOpenLinkOffice = document.getElementById('btn-open-link-office-modal');
+    const btnCloseLinkOffice = document.getElementById('btn-close-link-office');
+    const formLinkOffice = document.getElementById('form-link-office');
+    const linkOfficeSelect = document.getElementById('link-office-select');
+
+    if (btnOpenLinkOffice) {
+      btnOpenLinkOffice.addEventListener('click', () => {
+        if (linkOfficeSelect) {
+          linkOfficeSelect.innerHTML = store.offices.map(o => `<option value="${o.id}">${escapeHTML(o.name)} (${o.code})</option>`).join('');
+        }
+        if (modalLinkOffice) modalLinkOffice.classList.add('active');
+      });
+    }
+    if (btnCloseLinkOffice) btnCloseLinkOffice.addEventListener('click', () => modalLinkOffice?.classList.remove('active'));
+
+    if (formLinkOffice) {
+      formLinkOffice.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const officeId = document.getElementById('link-office-select').value;
+        let userNetwork = store.directorNetworks.find(n => n.directorId === store.currentUserId);
+
+        // Auto-create director network if user doesn't have one yet
+        if (!userNetwork) {
+          const userObj = store.getCurrentUser();
+          const netRes = await store.createDirectorNetwork(`${userObj.name}'s World Team Network`, userObj.id);
+          if (netRes.success) {
+            userNetwork = netRes.network;
+          } else {
+            alert('Failed to initialize Director Network: ' + netRes.message);
+            return;
+          }
+        }
+
+        const res = await store.linkOfficeToNetwork(userNetwork.id, officeId);
+        if (res.success) {
+          modalLinkOffice?.classList.remove('active');
+          showToast('Office linked to your Director Network!');
+          renderDirectorNetworkPane();
+        } else {
+          alert('Failed to link office: ' + res.message);
+        }
+      });
+    }
+
+    // 6. Office Settings & Custom Branding Form
+    const formOfficeBranding = document.getElementById('form-office-branding');
+    if (formOfficeBranding) {
+      formOfficeBranding.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const activeOfficeId = store.currentMember?.primary_office_id || store.currentMember?.officeId || store.offices[0]?.id;
+        const brandingData = {
+          name: document.getElementById('setting-office-name').value,
+          description: document.getElementById('setting-office-desc').value,
+          logoUrl: document.getElementById('setting-office-logo').value,
+          whatsappNumber: document.getElementById('setting-office-whatsapp').value,
+          primaryBrandColor: document.getElementById('setting-office-primary-color').value,
+          secondaryBrandColor: document.getElementById('setting-office-secondary-color').value
+        };
+
+        const res = await store.updateOfficeBranding(activeOfficeId, brandingData);
+        if (res.success) {
+          showToast('Office branding and settings saved!');
+          // Apply new colors live
+          document.documentElement.style.setProperty('--accent-primary', brandingData.primaryBrandColor);
+          document.documentElement.style.setProperty('--accent-secondary', brandingData.secondaryBrandColor);
+          renderOfficeSettingsPane();
+        } else {
+          alert('Failed to save office branding: ' + res.message);
+        }
+      });
+    }
+
+    // 7. Copy Public Member Join Link
+    const btnCopyJoinLink = document.getElementById('btn-copy-join-link');
+    if (btnCopyJoinLink) {
+      btnCopyJoinLink.addEventListener('click', () => {
+        const input = document.getElementById('setting-copy-join-url');
+        if (input && input.value) {
+          navigator.clipboard.writeText(input.value).then(() => {
+            showToast('Office join link copied to clipboard!');
+          }).catch(() => {
+            input.select();
+            document.execCommand('copy');
+            showToast('Office join link copied!');
+          });
         }
       });
     }

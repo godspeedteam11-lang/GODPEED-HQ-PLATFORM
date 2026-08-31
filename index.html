@@ -463,9 +463,21 @@
             </a>
           </li>
           <li>
+            <a href="#" class="nav-link" data-route="/leaderboard">
+              <i class="fas fa-trophy"></i>
+              <span>Live Earnings Leaderboard</span>
+            </a>
+          </li>
+          <li>
             <a href="#" class="nav-link" data-route="/attendance">
               <i class="fas fa-qrcode"></i>
               <span>GPS & QR Attendance</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/training">
+              <i class="fas fa-graduation-cap"></i>
+              <span>Training & Classes</span>
             </a>
           </li>
           <li>
@@ -508,6 +520,19 @@
         </ul>
       </div>
 
+      <!-- DIRECTOR / WORLD TEAM NAVIGATION -->
+      <div class="nav-section" id="nav-section-network" style="display:none;">
+        <div class="nav-section-title">World Team Network</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-link" data-route="/network">
+              <i class="fas fa-network-wired"></i>
+              <span>Director Multi-Office Network</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
       <!-- ADDITIVE TEAM LEADER OFFICE NAVIGATION -->
       <div class="nav-section" id="nav-section-leader" style="display:none;">
         <div class="nav-section-title">Office Operations</div>
@@ -515,7 +540,13 @@
           <li>
             <a href="#" class="nav-link" data-route="/office-dashboard">
               <i class="fas fa-building"></i>
-              <span>Office Management Dashboard</span>
+              <span>Office Management</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-link" data-route="/office-settings">
+              <i class="fas fa-sliders-h"></i>
+              <span>Office Settings & Branding</span>
             </a>
           </li>
           <li>
@@ -661,9 +692,222 @@
         <div id="office-view-container"></div>
       </section>
 
-      <!-- GENERAL TAB PANES -->
-      <section id="view-general-tab" class="tab-content">
-        
+        <!-- PANE: LIVE EARNINGS LEADERBOARD (SaaS Spec §2) -->
+        <div id="pane-leaderboard" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <h3><i class="fas fa-trophy" style="color:var(--accent-pink)"></i> Live Earnings Leaderboard</h3>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Real-time earnings rankings computed from verified ledger entries</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <select id="leaderboard-filter-timeframe" class="form-select" style="width:auto; padding:0.45rem 0.85rem; font-size:0.85rem;">
+                  <option value="this_month" selected>This Month</option>
+                  <option value="this_week">This Week</option>
+                  <option value="this_year">This Year</option>
+                  <option value="all_time">All Time</option>
+                </select>
+                <select id="leaderboard-filter-scope" class="form-select" style="width:auto; padding:0.45rem 0.85rem; font-size:0.85rem;">
+                  <option value="current_office" selected>Current Office</option>
+                  <option value="network">Linked Network</option>
+                  <option value="organization">Entire Organization</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Top 3 Podium Cards -->
+            <div id="leaderboard-podium-container" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1.25rem; margin:1.5rem 0;"></div>
+
+            <!-- Full Leaderboard Table -->
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width:70px;">Rank</th>
+                    <th>Member</th>
+                    <th>Rank Badge</th>
+                    <th>Gross Earned</th>
+                    <th>Net Earned</th>
+                    <th>10% Office Due</th>
+                    <th>Entries</th>
+                  </tr>
+                </thead>
+                <tbody id="leaderboard-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANE: TRAINING & PROGRESSION (SaaS Spec §1) -->
+        <div id="pane-training" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <h3><i class="fas fa-graduation-cap" style="color:var(--accent-primary)"></i> Training & Member Progression Management</h3>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Curriculum stages, module completion, tutor assignments, and session attendance</p>
+              </div>
+              <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-secondary btn-sm" id="btn-open-schedule-session-modal">
+                  <i class="fas fa-calendar-plus"></i> Schedule Session
+                </button>
+                <button class="btn btn-primary btn-sm" id="btn-open-create-class-modal">
+                  <i class="fas fa-plus"></i> Create Class
+                </button>
+              </div>
+            </div>
+
+            <!-- Active Training Classes Grid -->
+            <div style="margin-bottom:1.75rem;">
+              <h4 style="font-size:0.95rem; font-weight:700; color:#fff; margin-bottom:0.75rem;">Active Training Classes</h4>
+              <div id="training-classes-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1.25rem;"></div>
+            </div>
+
+            <!-- Member Progression Table -->
+            <div style="margin-bottom:1.75rem;">
+              <h4 style="font-size:0.95rem; font-weight:700; color:#fff; margin-bottom:0.75rem;">Member Progression Tracking</h4>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Member</th>
+                      <th>Class</th>
+                      <th>Progression Stage</th>
+                      <th>Modules Completed</th>
+                      <th>Assessment Score</th>
+                      <th>Last Training</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="training-members-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Training Sessions & Attendance -->
+            <div>
+              <h4 style="font-size:0.95rem; font-weight:700; color:#fff; margin-bottom:0.75rem;">Upcoming & Recent Sessions</h4>
+              <div id="training-sessions-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANE: DIRECTOR NETWORK (SaaS Spec §3) -->
+        <div id="pane-network" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <h3><i class="fas fa-network-wired" style="color:var(--accent-secondary)"></i> World Team Director Multi-Office Network</h3>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Cross-office oversight, network-wide attendance, earnings rollup, and linked office management</p>
+              </div>
+              <button class="btn btn-primary btn-sm" id="btn-open-link-office-modal">
+                <i class="fas fa-link"></i> Link Office to Network
+              </button>
+            </div>
+
+            <!-- Network Rollup Cards -->
+            <div id="director-network-metrics" class="metrics-row" style="margin:1.25rem 0;"></div>
+
+            <!-- Linked Offices List -->
+            <div style="margin-top:1.5rem;">
+              <h4 style="font-size:0.95rem; font-weight:700; color:#fff; margin-bottom:0.75rem;">Linked Offices in Your Network</h4>
+              <div id="director-linked-offices-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1.25rem;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANE: OFFICE SETTINGS & BRANDING (SaaS Spec §6 & §10) -->
+        <div id="pane-office-settings" class="general-tab-pane" style="display:none;">
+          <div class="card-panel">
+            <div class="panel-head">
+              <h3><i class="fas fa-sliders-h" style="color:var(--accent-primary)"></i> Office Settings & Custom Tenant Branding</h3>
+              <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Customize your office name, web address slug, logo, brand colors, and subscription plan</p>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1.75rem; margin-top:1.5rem;">
+              <!-- Office Profile & Branding Form -->
+              <div>
+                <form id="form-office-branding">
+                  <div class="form-group">
+                    <label>Office Display Name</label>
+                    <input type="text" id="setting-office-name" class="form-input" required>
+                  </div>
+                  <div class="form-group">
+                    <label>Office Web Address Slug</label>
+                    <input type="text" id="setting-office-slug" class="form-input" disabled style="opacity:0.75;">
+                    <small style="font-size:0.75rem; color:var(--text-muted);">Direct URL: <span id="setting-office-url-preview" style="color:var(--accent-primary);">app.legacyosapp.com/#/o/slug</span></small>
+                  </div>
+                  <div class="form-group">
+                    <label>Office Description</label>
+                    <textarea id="setting-office-desc" class="form-input" rows="2"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>Logo Image URL</label>
+                    <input type="url" id="setting-office-logo" class="form-input" placeholder="https://...">
+                  </div>
+                  <div class="form-group">
+                    <label>Official WhatsApp Support Number</label>
+                    <input type="tel" id="setting-office-whatsapp" class="form-input" placeholder="+234 800 000 0000">
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div class="form-group">
+                      <label>Primary Brand Color</label>
+                      <input type="color" id="setting-office-primary-color" class="form-input" style="height:42px; padding:2px;" value="#6366f1">
+                    </div>
+                    <div class="form-group">
+                      <label>Secondary Brand Color</label>
+                      <input type="color" id="setting-office-secondary-color" class="form-input" style="height:42px; padding:2px;" value="#8b5cf6">
+                    </div>
+                  </div>
+                  <button type="submit" class="btn btn-primary" style="margin-top:0.75rem;">
+                    <i class="fas fa-save"></i> Save Office Branding
+                  </button>
+                </form>
+              </div>
+
+              <!-- Subscription & Plan Limits Card -->
+              <div>
+                <div class="card-panel" style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color);">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h4 style="color:#fff; font-size:1.1rem; margin:0;"><i class="fas fa-shield-alt" style="color:var(--status-green)"></i> Subscription Status</h4>
+                    <span id="office-subscription-badge" class="badge badge-green">30-Day Trial Active</span>
+                  </div>
+
+                  <div style="margin-bottom:1.25rem;">
+                    <div style="font-size:0.85rem; color:var(--text-muted);">Current Plan:</div>
+                    <div id="office-plan-name" style="font-size:1.25rem; font-weight:800; color:#fff;">Starter Monthly (₦7,500/mo)</div>
+                  </div>
+
+                  <!-- Trial Countdown -->
+                  <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:var(--radius-sm); padding:0.85rem; margin-bottom:1.25rem;">
+                    <div style="font-size:0.8rem; color:#a7f3d0; font-weight:700;">30-Day Free Trial Remaining:</div>
+                    <div id="office-trial-days" style="font-size:1.5rem; font-weight:800; color:var(--status-green);">30 Days</div>
+                  </div>
+
+                  <!-- Member Limit Gauge -->
+                  <div style="margin-bottom:1.25rem;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.35rem;">
+                      <span style="color:var(--text-muted);">Plan Member Cap:</span>
+                      <strong id="office-member-limit-text" style="color:#fff;">1 / 49 Members</strong>
+                    </div>
+                    <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden;">
+                      <div id="office-member-limit-bar" style="width:2%; height:100%; background:var(--accent-gradient);"></div>
+                    </div>
+                  </div>
+
+                  <!-- Direct Member Join URL Box -->
+                  <div style="background:rgba(0,0,0,0.3); border:1px dashed var(--border-color); border-radius:var(--radius-sm); padding:0.85rem;">
+                    <div style="font-size:0.8rem; color:#cbd5e1; font-weight:700; margin-bottom:0.25rem;">Your Office Public Join Link:</div>
+                    <div style="display:flex; gap:0.5rem;">
+                      <input type="text" id="setting-copy-join-url" class="form-input" readonly style="font-size:0.8rem;">
+                      <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-join-link"><i class="fas fa-copy"></i></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="pane-genealogy" class="general-tab-pane" style="display:none;">
           <div class="card-panel">
             <div class="panel-head">
@@ -929,13 +1173,162 @@
           <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">Net Amount Earned (NGN)</label>
           <input type="number" id="earning-amount" placeholder="e.g. 150000" required style="width:100%; padding:0.65rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-sm); color:#fff; font-size:0.875rem;">
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
-          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-earning').classList.remove('active')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Earning & Split</button>
+  <!-- MODAL 3: CREATE TRAINING CLASS -->
+  <div class="modal-overlay" id="modal-create-class">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fas fa-graduation-cap" style="color:var(--accent-primary)"></i> Create New Training Class</h3>
+        <button class="close-btn" id="btn-close-create-class">&times;</button>
+      </div>
+      <form id="form-create-class">
+        <div class="form-group">
+          <label>Class Name</label>
+          <input type="text" id="class-name" class="form-input" placeholder="e.g. NeoLife Product Masterclass & Sales Dynamics" required>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="class-desc" class="form-input" rows="2" placeholder="Course syllabus and target outcomes..."></textarea>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div class="form-group">
+            <label>Assigned Tutor</label>
+            <select id="class-tutor-select" class="form-select"></select>
+          </div>
+          <div class="form-group">
+            <label>Training Head</label>
+            <select id="class-head-select" class="form-select"></select>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div class="form-group">
+            <label>Schedule Info</label>
+            <input type="text" id="class-schedule" class="form-input" placeholder="e.g. Tuesdays & Thursdays 4 PM">
+          </div>
+          <div class="form-group">
+            <label>Location / Room</label>
+            <input type="text" id="class-location" class="form-input" placeholder="e.g. Office Training Hall A">
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-create-class').classList.remove('active')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Training Class</button>
         </div>
       </form>
     </div>
   </div>
+
+  <!-- MODAL 4: SCHEDULE TRAINING SESSION -->
+  <div class="modal-overlay" id="modal-schedule-session">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fas fa-calendar-plus" style="color:var(--accent-secondary)"></i> Schedule Training Session</h3>
+        <button class="close-btn" id="btn-close-schedule-session">&times;</button>
+      </div>
+      <form id="form-schedule-session">
+        <div class="form-group">
+          <label>Target Class</label>
+          <select id="session-class-select" class="form-select" required></select>
+        </div>
+        <div class="form-group">
+          <label>Session Topic</label>
+          <input type="text" id="session-topic" class="form-input" placeholder="e.g. Closing High-Ticket Herbal Consultations" required>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="session-date" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label>Start Time</label>
+            <input type="time" id="session-time" class="form-input" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Session Notes / Materials Link</label>
+          <textarea id="session-notes" class="form-input" rows="2" placeholder="Required handouts or study materials..."></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-schedule-session').classList.remove('active')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Schedule Session</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 5: UPDATE MEMBER PROGRESSION -->
+  <div class="modal-overlay" id="modal-member-progress">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fas fa-user-graduate" style="color:var(--status-green)"></i> Update Member Training Progress</h3>
+        <button class="close-btn" id="btn-close-member-progress">&times;</button>
+      </div>
+      <form id="form-member-progress">
+        <input type="hidden" id="progress-class-id">
+        <input type="hidden" id="progress-member-id">
+        <div style="margin-bottom:1rem;">
+          <h4 id="progress-member-name" style="color:#fff; font-size:1.1rem;">Member Name</h4>
+          <span id="progress-class-name" style="color:var(--text-muted); font-size:0.85rem;">Class Name</span>
+        </div>
+        <div class="form-group">
+          <label>Progression Stage (PRD Curriculum Sequence)</label>
+          <select id="progress-stage-select" class="form-select">
+            <option value="Beginner">1. Beginner Stage</option>
+            <option value="Foundation">2. Foundation Stage</option>
+            <option value="Intermediate">3. Intermediate Stage</option>
+            <option value="Advanced">4. Advanced Stage</option>
+            <option value="Leadership">5. Leadership Stage</option>
+          </select>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div class="form-group">
+            <label>Modules Completed (out of 10)</label>
+            <input type="number" id="progress-modules-completed" class="form-input" min="0" max="10" value="0">
+          </div>
+          <div class="form-group">
+            <label>Assessment Score (%)</label>
+            <input type="number" id="progress-assessment-score" class="form-input" min="0" max="100" step="0.1" value="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Tutor Notes / Performance Feedback</label>
+          <textarea id="progress-tutor-notes" class="form-input" rows="2" placeholder="Student demonstrated excellent grasp of product benefits..."></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-member-progress').classList.remove('active')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Progression</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 6: LINK OFFICE TO DIRECTOR NETWORK -->
+  <div class="modal-overlay" id="modal-link-office">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fas fa-link" style="color:var(--accent-secondary)"></i> Link Office to Director Network</h3>
+        <button class="close-btn" id="btn-close-link-office">&times;</button>
+      </div>
+      <form id="form-link-office">
+        <div class="form-group">
+          <label>Select Office to Add to Your Network</label>
+          <select id="link-office-select" class="form-select" required></select>
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-muted);">
+          Linking an office gives you high-level aggregate visibility over its attendance, earnings leaderboard, and member volume.
+        </p>
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-link-office').classList.remove('active')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Link Office</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- FLOATING WHATSAPP SUPPORT BUTTON (SaaS Spec §14) -->
+  <a id="legacyos-whatsapp-floating-btn" href="https://wa.me/2348000000000?text=Hello%20LegacyOS%20Support%2C%20I%20need%20assistance%20with%20my%20office%20setup" target="_blank" rel="noopener noreferrer" style="position:fixed; bottom:24px; left:24px; background:#25D366; color:#fff; padding:0.65rem 1.15rem; border-radius:999px; font-weight:700; font-size:0.875rem; display:flex; align-items:center; gap:0.5rem; text-decoration:none; box-shadow:0 8px 24px rgba(37,211,102,0.4); z-index:999; transition:transform 0.2s ease;">
+    <i class="fab fa-whatsapp" style="font-size:1.25rem;"></i>
+    <span>Need Help? Chat on WhatsApp</span>
+  </a>
 
   <!-- JavaScript Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

@@ -23,8 +23,24 @@ class GodspeedStore {
     this.earningsLedger = [];
     this.healthScores = [];
     this.chatMessages = [];
+    this.communityPosts = [];
     this.noticeBoard = [];
     this.genealogyClosure = [];
+
+    // LegacyOS SaaS Modules
+    this.trainingClasses = [];
+    this.trainingClassMembers = [];
+    this.trainingSessions = [];
+    this.trainingAttendance = [];
+    this.directorNetworks = [];
+    this.networkOffices = [];
+    this.subscriptionPlans = [];
+    this.subscriptions = [];
+    this.notifications = [];
+
+    // Active Tenant Context
+    this.currentOfficeSlug = null;
+    this.currentOffice = null;
 
     this.init();
   }
@@ -61,8 +77,8 @@ class GodspeedStore {
 
   normalizeOffice(o) {
     if (!o) return null;
-    let lat = 7.2571;
-    let lng = 5.2058;
+    let lat = o.latitude || 7.2571;
+    let lng = o.longitude || 5.2058;
     if (o.code === 'HQ-LGS') { lat = 6.6018; lng = 3.3515; }
     else if (o.code === 'HQ-ABJ') { lat = 9.0765; lng = 7.3986; }
 
@@ -70,6 +86,7 @@ class GodspeedStore {
       ...o,
       id: o.id,
       code: o.code,
+      slug: o.slug || (o.code ? o.code.toLowerCase().replace(/_/g, '-') : 'office-' + o.id.substring(0, 6)),
       name: o.name,
       address: o.address || '',
       latitude: lat,
@@ -78,7 +95,146 @@ class GodspeedStore {
       geofence_radius_meters: o.geofence_radius_meters || o.radiusMeters || 30,
       teamLeaderId: o.team_leader_id || o.teamLeaderId,
       team_leader_id: o.team_leader_id || o.teamLeaderId,
+      logoUrl: o.logo_url || o.logoUrl || null,
+      logo_url: o.logo_url || o.logoUrl || null,
+      description: o.description || '',
+      phone: o.phone || '',
+      whatsappNumber: o.whatsapp_number || o.whatsappNumber || '+2348000000000',
+      whatsapp_number: o.whatsapp_number || o.whatsappNumber || '+2348000000000',
+      websiteUrl: o.website_url || o.websiteUrl || '',
+      primaryBrandColor: o.primary_brand_color || o.primaryBrandColor || '#6366f1',
+      primary_brand_color: o.primary_brand_color || o.primaryBrandColor || '#6366f1',
+      secondaryBrandColor: o.secondary_brand_color || o.secondaryBrandColor || '#8b5cf6',
+      secondary_brand_color: o.secondary_brand_color || o.secondaryBrandColor || '#8b5cf6',
+      subscriptionPlanId: o.subscription_plan_id || o.subscriptionPlanId || 'starter_monthly',
+      subscription_plan_id: o.subscription_plan_id || o.subscriptionPlanId || 'starter_monthly',
+      subscriptionStatus: o.subscription_status || o.subscriptionStatus || 'trial',
+      subscription_status: o.subscription_status || o.subscriptionStatus || 'trial',
+      trialStartAt: o.trial_start_at || o.trialStartAt || new Date().toISOString(),
+      trial_start_at: o.trial_start_at || o.trialStartAt || new Date().toISOString(),
+      trialEndAt: o.trial_end_at || o.trialEndAt || new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+      trial_end_at: o.trial_end_at || o.trialEndAt || new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+      billingCycle: o.billing_cycle || o.billingCycle || 'monthly',
+      billing_cycle: o.billing_cycle || o.billingCycle || 'monthly',
+      memberLimit: o.member_limit || o.memberLimit || 49,
+      member_limit: o.member_limit || o.memberLimit || 49,
       timezone: o.timezone || 'Africa/Lagos'
+    };
+  }
+
+  normalizeTrainingClass(c) {
+    if (!c) return null;
+    return {
+      ...c,
+      id: c.id,
+      officeId: c.office_id || c.officeId,
+      office_id: c.office_id || c.officeId,
+      name: c.name,
+      description: c.description || '',
+      tutorId: c.tutor_id || c.tutorId,
+      tutor_id: c.tutor_id || c.tutorId,
+      headId: c.head_id || c.headId,
+      head_id: c.head_id || c.headId,
+      scheduleInfo: c.schedule_info || c.scheduleInfo || 'Flexible',
+      schedule_info: c.schedule_info || c.scheduleInfo || 'Flexible',
+      locationInfo: c.location_info || c.locationInfo || 'Office Hall',
+      location_info: c.location_info || c.locationInfo || 'Office Hall',
+      isActive: c.is_active ?? true,
+      is_active: c.is_active ?? true,
+      createdAt: c.created_at || c.createdAt
+    };
+  }
+
+  normalizeTrainingClassMember(m) {
+    if (!m) return null;
+    return {
+      ...m,
+      classId: m.class_id || m.classId,
+      class_id: m.class_id || m.classId,
+      memberId: m.member_id || m.memberId,
+      member_id: m.member_id || m.memberId,
+      stage: m.stage || 'Beginner',
+      modulesCompleted: m.modules_completed ?? 0,
+      modules_completed: m.modules_completed ?? 0,
+      totalModules: m.total_modules ?? 10,
+      total_modules: m.total_modules ?? 10,
+      assessmentScore: m.assessment_score ?? 0.00,
+      assessment_score: m.assessment_score ?? 0.00,
+      tutorNotes: m.tutor_notes || '',
+      tutor_notes: m.tutor_notes || '',
+      lastTrainingDate: m.last_training_date || null,
+      last_training_date: m.last_training_date || null,
+      enrolledAt: m.enrolled_at || m.enrolledAt
+    };
+  }
+
+  normalizeTrainingSession(s) {
+    if (!s) return null;
+    return {
+      ...s,
+      id: s.id,
+      classId: s.class_id || s.classId,
+      class_id: s.class_id || s.classId,
+      sessionDate: s.session_date || s.sessionDate,
+      session_date: s.session_date || s.sessionDate,
+      startTime: s.start_time || s.startTime,
+      start_time: s.start_time || s.startTime,
+      endTime: s.end_time || s.endTime,
+      end_time: s.end_time || s.endTime,
+      topic: s.topic,
+      tutorId: s.tutor_id || s.tutorId,
+      tutor_id: s.tutor_id || s.tutorId,
+      notes: s.notes || '',
+      createdAt: s.created_at
+    };
+  }
+
+  normalizeTrainingAttendance(a) {
+    if (!a) return null;
+    return {
+      ...a,
+      id: a.id,
+      sessionId: a.session_id || a.sessionId,
+      session_id: a.session_id || a.sessionId,
+      memberId: a.member_id || a.memberId,
+      member_id: a.member_id || a.memberId,
+      status: a.status || 'present',
+      notes: a.notes || '',
+      createdAt: a.created_at
+    };
+  }
+
+  normalizeDirectorNetwork(n) {
+    if (!n) return null;
+    return {
+      ...n,
+      id: n.id,
+      name: n.name,
+      directorId: n.director_id || n.directorId,
+      director_id: n.director_id || n.directorId,
+      description: n.description || '',
+      createdAt: n.created_at
+    };
+  }
+
+  normalizeNotification(n) {
+    if (!n) return null;
+    return {
+      ...n,
+      id: n.id,
+      memberId: n.member_id || n.memberId,
+      member_id: n.member_id || n.memberId,
+      officeId: n.office_id || n.officeId,
+      office_id: n.office_id || n.officeId,
+      type: n.type || 'system',
+      title: n.title,
+      message: n.message,
+      actionUrl: n.action_url || n.actionUrl || '/dashboard',
+      action_url: n.action_url || n.actionUrl || '/dashboard',
+      isRead: n.is_read ?? false,
+      is_read: n.is_read ?? false,
+      metadata: n.metadata || {},
+      createdAt: n.created_at
     };
   }
 
@@ -308,7 +464,16 @@ class GodspeedStore {
         chatRes,
         communityRes,
         noticeRes,
-        closureRes
+        closureRes,
+        trainingClassesRes,
+        trainingClassMembersRes,
+        trainingSessionsRes,
+        trainingAttendanceRes,
+        directorNetworksRes,
+        networkOfficesRes,
+        subscriptionPlansRes,
+        subscriptionsRes,
+        notificationsRes
       ] = await Promise.all([
         window.godspeedSupabase.from('offices').select('*'),
         window.godspeedSupabase.from('members').select('*'),
@@ -320,7 +485,16 @@ class GodspeedStore {
         window.godspeedSupabase.from('chat_messages').select('*').order('created_at', { ascending: true }),
         window.godspeedSupabase.from('community_posts').select('*').order('created_at', { ascending: false }),
         window.godspeedSupabase.from('notice_board').select('*').order('created_at', { ascending: false }),
-        window.godspeedSupabase.from('genealogy_closure').select('*')
+        window.godspeedSupabase.from('genealogy_closure').select('*'),
+        window.godspeedSupabase.from('training_classes').select('*').order('created_at', { ascending: false }),
+        window.godspeedSupabase.from('training_class_members').select('*'),
+        window.godspeedSupabase.from('training_sessions').select('*').order('session_date', { ascending: false }),
+        window.godspeedSupabase.from('training_attendance').select('*'),
+        window.godspeedSupabase.from('director_networks').select('*').order('created_at', { ascending: false }),
+        window.godspeedSupabase.from('network_offices').select('*'),
+        window.godspeedSupabase.from('subscription_plans').select('*'),
+        window.godspeedSupabase.from('subscriptions').select('*'),
+        window.godspeedSupabase.from('notifications').select('*').order('created_at', { ascending: false })
       ]);
 
       if (officesRes.data) {
@@ -348,8 +522,8 @@ class GodspeedStore {
           official_rank: 'newbie',
           rank: 'newbie',
           highest_achieved_rank: 'newbie',
-          primary_office_id: '33333333-3333-3333-3333-333333333333',
-          officeId: '33333333-3333-3333-3333-333333333333'
+          primary_office_id: this.offices[0]?.id || '33333333-3333-3333-3333-333333333333',
+          officeId: this.offices[0]?.id || '33333333-3333-3333-3333-333333333333'
         };
         this.currentMember = this.normalizeMember(fallback);
         if (!this.members.some(m => m.id === this.currentUserId)) {
@@ -365,7 +539,7 @@ class GodspeedStore {
           phone: this.currentMember.phone,
           role: 'member',
           official_rank: 'newbie',
-          primary_office_id: '33333333-3333-3333-3333-333333333333'
+          primary_office_id: this.currentMember.officeId
         }).then(() => {}).catch(() => {});
       }
 
@@ -392,6 +566,35 @@ class GodspeedStore {
       }
       if (noticeRes.data && noticeRes.data.length > 0) {
         this.noticeBoard = noticeRes.data.map(n => this.normalizeNoticeItem(n));
+      }
+
+      // LegacyOS SaaS Collections
+      if (trainingClassesRes.data) {
+        this.trainingClasses = trainingClassesRes.data.map(c => this.normalizeTrainingClass(c));
+      }
+      if (trainingClassMembersRes.data) {
+        this.trainingClassMembers = trainingClassMembersRes.data.map(m => this.normalizeTrainingClassMember(m));
+      }
+      if (trainingSessionsRes.data) {
+        this.trainingSessions = trainingSessionsRes.data.map(s => this.normalizeTrainingSession(s));
+      }
+      if (trainingAttendanceRes.data) {
+        this.trainingAttendance = trainingAttendanceRes.data.map(a => this.normalizeTrainingAttendance(a));
+      }
+      if (directorNetworksRes.data) {
+        this.directorNetworks = directorNetworksRes.data.map(n => this.normalizeDirectorNetwork(n));
+      }
+      if (networkOfficesRes.data) {
+        this.networkOffices = networkOfficesRes.data;
+      }
+      if (subscriptionPlansRes.data) {
+        this.subscriptionPlans = subscriptionPlansRes.data;
+      }
+      if (subscriptionsRes.data) {
+        this.subscriptions = subscriptionsRes.data;
+      }
+      if (notificationsRes.data) {
+        this.notifications = notificationsRes.data.map(n => this.normalizeNotification(n));
       } else {
         this.noticeBoard = [
           { 
@@ -1087,6 +1290,420 @@ class GodspeedStore {
       return { success: true, item: normalized, message: 'Notice broadcast published successfully!' };
     } catch (err) {
       return { success: false, message: err.message || 'Failed to publish notice.' };
+    }
+  }
+
+  /* ============================================================================
+   * LEGACYOS SAAS ENGINE METHODS
+   * ============================================================================ */
+
+  /* Resolve Office by URL Slug or Code */
+  resolveOfficeBySlug(slug) {
+    if (!slug) return null;
+    const cleanSlug = slug.toLowerCase().trim();
+    return this.offices.find(o => 
+      (o.slug && o.slug.toLowerCase() === cleanSlug) ||
+      (o.code && o.code.toLowerCase() === cleanSlug) ||
+      (o.id === cleanSlug)
+    ) || null;
+  }
+
+  /* 1. Live Earnings Leaderboard (PRD & SaaS Spec §2) */
+  getLeaderboardData(timeframe = 'this_month', officeScope = 'current_office', targetOfficeId = null) {
+    const now = new Date();
+    let startDate = new Date(0);
+
+    if (timeframe === 'this_week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      startDate = new Date(now.setDate(diff));
+      startDate.setHours(0, 0, 0, 0);
+    } else if (timeframe === 'this_month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (timeframe === 'this_year') {
+      startDate = new Date(now.getFullYear(), 0, 1);
+    }
+
+    // Filter relevant earnings entries
+    let filteredEarnings = this.earningsLedger.filter(e => {
+      const eDate = new Date(e.earnedDate || e.earned_date);
+      return eDate >= startDate;
+    });
+
+    // Office Scope Filtering
+    let validMemberIds = null;
+    const activeOfficeId = targetOfficeId || (this.currentMember ? (this.currentMember.primary_office_id || this.currentMember.officeId) : null);
+
+    if (officeScope === 'current_office' && activeOfficeId) {
+      const officeMembers = this.members.filter(m => (m.primary_office_id === activeOfficeId || m.officeId === activeOfficeId));
+      validMemberIds = new Set(officeMembers.map(m => m.id));
+    } else if (officeScope === 'network') {
+      // Find linked offices in director's network
+      const userNetwork = this.directorNetworks.find(n => n.directorId === this.currentUserId);
+      if (userNetwork) {
+        const linkedOfficeIds = this.networkOffices.filter(no => no.network_id === userNetwork.id).map(no => no.office_id);
+        const networkMembers = this.members.filter(m => linkedOfficeIds.includes(m.primary_office_id || m.officeId));
+        validMemberIds = new Set(networkMembers.map(m => m.id));
+      }
+    }
+
+    if (validMemberIds) {
+      filteredEarnings = filteredEarnings.filter(e => validMemberIds.has(e.memberId || e.member_id));
+    }
+
+    // Aggregate by Member
+    const memberTotals = {};
+    filteredEarnings.forEach(e => {
+      const mId = e.memberId || e.member_id;
+      if (!memberTotals[mId]) {
+        const memberObj = this.members.find(m => m.id === mId);
+        memberTotals[mId] = {
+          memberId: mId,
+          memberName: memberObj ? (memberObj.full_name || memberObj.name) : 'Member',
+          memberCode: memberObj ? (memberObj.member_code || memberObj.code) : 'GSD-000',
+          memberRank: memberObj ? (memberObj.official_rank || memberObj.rank) : 'newbie',
+          officeId: memberObj ? (memberObj.primary_office_id || memberObj.officeId) : null,
+          totalGross: 0,
+          totalNet: 0,
+          total10Due: 0,
+          entriesCount: 0
+        };
+      }
+      memberTotals[mId].totalGross += Number(e.grossAmount || e.gross_amount || 0);
+      memberTotals[mId].totalNet += Number(e.netAmount || e.net_amount || 0);
+      memberTotals[mId].total10Due += Number(e.officeDue10 || e.office_due_10 || 0);
+      memberTotals[mId].entriesCount += 1;
+    });
+
+    // Sort Descending by Gross Earnings
+    const sortedLeaderboard = Object.values(memberTotals).sort((a, b) => b.totalGross - a.totalGross);
+
+    // Attach Rankings & Current User Position
+    let currentUserRank = null;
+    sortedLeaderboard.forEach((item, index) => {
+      item.rankPosition = index + 1;
+      if (item.memberId === this.currentUserId) {
+        currentUserRank = index + 1;
+      }
+    });
+
+    return {
+      timeframe,
+      officeScope,
+      totalEarners: sortedLeaderboard.length,
+      top3: sortedLeaderboard.slice(0, 3),
+      leaderboard: sortedLeaderboard,
+      currentUserPosition: currentUserRank
+    };
+  }
+
+  /* 2. SaaS Tenant Office Onboarding (PRD & SaaS Spec §7) */
+  async createTenantOffice(officeData) {
+    if (!window.godspeedSupabase) {
+      return { success: false, message: 'Supabase client is not connected.' };
+    }
+
+    const { name, slug, address, phone, whatsappNumber, websiteUrl, leaderName, leaderEmail, leaderPhone, planId = 'starter_monthly' } = officeData;
+    if (!name || !slug) {
+      return { success: false, message: 'Office name and web address slug are required.' };
+    }
+
+    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+    try {
+      const officeCode = 'OFF-' + Math.floor(1000 + Math.random() * 9000);
+      const isAnnual = planId.includes('annual');
+      const memberLimit = planId.includes('growth') ? 999999 : 49;
+
+      const { data: newOffice, error: officeErr } = await window.godspeedSupabase
+        .from('offices')
+        .insert({
+          code: officeCode,
+          slug: cleanSlug,
+          name: name.trim(),
+          address: address || 'Main City Office',
+          location: `SRID=4326;POINT(5.2058 7.2571)`,
+          phone: phone || '',
+          whatsapp_number: whatsappNumber || '',
+          website_url: websiteUrl || '',
+          subscription_plan_id: planId,
+          subscription_status: 'trial',
+          trial_start_at: new Date().toISOString(),
+          trial_end_at: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+          billing_cycle: isAnnual ? 'annual' : 'monthly',
+          member_limit: memberLimit
+        })
+        .select()
+        .single();
+
+      if (officeErr) {
+        return { success: false, message: 'Office Creation Failed: ' + officeErr.message };
+      }
+
+      // Initialize Subscription Row
+      await window.godspeedSupabase.from('subscriptions').insert({
+        office_id: newOffice.id,
+        plan_id: planId,
+        status: 'trial',
+        trial_start: new Date().toISOString(),
+        trial_end: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+        current_period_start: new Date().toISOString(),
+        current_period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString()
+      });
+
+      // Audit Subscription Event
+      await window.godspeedSupabase.from('subscription_events').insert({
+        office_id: newOffice.id,
+        event_type: 'trial_started',
+        amount_paid: 0.00,
+        notes: `30-day free trial started for ${name}`
+      });
+
+      await this.loadAllAppData();
+      return { success: true, office: this.normalizeOffice(newOffice), message: `Office "${name}" created successfully with 30-day free trial!` };
+    } catch (err) {
+      return { success: false, message: err.message || 'Unexpected office creation error' };
+    }
+  }
+
+  /* 3. Office Branding & Settings (SaaS Spec §6) */
+  async updateOfficeBranding(officeId, brandingData) {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('offices')
+        .update({
+          name: brandingData.name,
+          logo_url: brandingData.logoUrl || null,
+          description: brandingData.description,
+          phone: brandingData.phone,
+          whatsapp_number: brandingData.whatsappNumber,
+          website_url: brandingData.websiteUrl,
+          primary_brand_color: brandingData.primaryBrandColor || '#6366f1',
+          secondary_brand_color: brandingData.secondaryBrandColor || '#8b5cf6',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', officeId)
+        .select()
+        .single();
+
+      if (error) return { success: false, message: error.message };
+
+      await this.loadAllAppData();
+      return { success: true, office: this.normalizeOffice(data), message: 'Office branding updated successfully!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  /* 4. Training Classes Management (SaaS Spec §1) */
+  async createTrainingClass(classData) {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('training_classes')
+        .insert({
+          office_id: classData.officeId,
+          name: classData.name.trim(),
+          description: classData.description || '',
+          tutor_id: classData.tutorId || null,
+          head_id: classData.headId || null,
+          schedule_info: classData.scheduleInfo || 'Flexible',
+          location_info: classData.locationInfo || 'Office Hall',
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) return { success: false, message: error.message };
+
+      await this.loadAllAppData();
+      return { success: true, trainingClass: this.normalizeTrainingClass(data), message: 'Training class created!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async enrollClassMember(classId, memberId, stage = 'Beginner') {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('training_class_members')
+        .upsert({
+          class_id: classId,
+          member_id: memberId,
+          stage: stage || 'Beginner',
+          modules_completed: 0,
+          total_modules: 10,
+          assessment_score: 0.00,
+          enrolled_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) return { success: false, message: error.message };
+      await this.loadAllAppData();
+      return { success: true, member: this.normalizeTrainingClassMember(data), message: 'Member enrolled in training class!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async updateMemberProgress(classId, memberId, progressData) {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('training_class_members')
+        .update({
+          stage: progressData.stage,
+          modules_completed: progressData.modulesCompleted,
+          assessment_score: progressData.assessmentScore,
+          tutor_notes: progressData.tutorNotes,
+          last_training_date: new Date().toISOString().split('T')[0]
+        })
+        .match({ class_id: classId, member_id: memberId })
+        .select()
+        .single();
+
+      if (error) return { success: false, message: error.message };
+      await this.loadAllAppData();
+      return { success: true, message: 'Training progression updated!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async createTrainingSession(sessionData) {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('training_sessions')
+        .insert({
+          class_id: sessionData.classId,
+          session_date: sessionData.sessionDate,
+          start_time: sessionData.startTime,
+          end_time: sessionData.endTime || null,
+          topic: sessionData.topic.trim(),
+          tutor_id: sessionData.tutorId || null,
+          notes: sessionData.notes || ''
+        })
+        .select()
+        .single();
+
+      if (error) return { success: false, message: error.message };
+      await this.loadAllAppData();
+      return { success: true, session: this.normalizeTrainingSession(data), message: 'Training session scheduled!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async recordTrainingAttendance(sessionId, memberId, status = 'present', notes = '') {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('training_attendance')
+        .upsert({
+          session_id: sessionId,
+          member_id: memberId,
+          status: status,
+          notes: notes
+        })
+        .select()
+        .single();
+
+      if (error) return { success: false, message: error.message };
+      await this.loadAllAppData();
+      return { success: true, message: 'Training attendance recorded!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  /* 5. Director / World Team Networks (SaaS Spec §3) */
+  async createDirectorNetwork(name, directorId, description = '') {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('director_networks')
+        .insert({
+          name: name.trim(),
+          director_id: directorId,
+          description: description
+        })
+        .select()
+        .single();
+
+      if (error) return { success: false, message: error.message };
+      await this.loadAllAppData();
+      return { success: true, network: this.normalizeDirectorNetwork(data), message: 'Director Network created!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async linkOfficeToNetwork(networkId, officeId) {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('network_offices')
+        .insert({ network_id: networkId, office_id: officeId })
+        .select();
+
+      if (error) return { success: false, message: error.message };
+      await this.loadAllAppData();
+      return { success: true, message: 'Office linked to Director Network!' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async unlinkOfficeFromNetwork(networkId, officeId) {
+    if (!window.godspeedSupabase) return { success: false, message: 'Supabase unavailable' };
+    try {
+      const { error } = await window.godspeedSupabase
+        .from('network_offices')
+        .delete()
+        .match({ network_id: networkId, office_id: officeId });
+
+      if (error) return { success: false, message: error.message };
+      await this.loadAllAppData();
+      return { success: true, message: 'Office unlinked from Director Network.' };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  /* 6. Notifications & Reminders (SaaS Spec §12) */
+  async markNotificationAsRead(notifId) {
+    if (!window.godspeedSupabase) return;
+    await window.godspeedSupabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notifId);
+    
+    const notif = this.notifications.find(n => n.id === notifId);
+    if (notif) notif.isRead = true;
+  }
+
+  async createNotification(notifData) {
+    if (!window.godspeedSupabase) return;
+    const { data } = await window.godspeedSupabase
+      .from('notifications')
+      .insert({
+        member_id: notifData.memberId || null,
+        office_id: notifData.officeId || null,
+        type: notifData.type || 'system',
+        title: notifData.title,
+        message: notifData.message,
+        action_url: notifData.actionUrl || '/dashboard'
+      })
+      .select()
+      .single();
+
+    if (data) {
+      this.notifications.unshift(this.normalizeNotification(data));
     }
   }
 }

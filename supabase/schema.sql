@@ -61,20 +61,55 @@ DO $$ BEGIN
     CREATE TYPE health_state AS ENUM ('green', 'amber', 'red');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- 3. OFFICES TABLE
+-- 3. OFFICES TABLE (Extended for LegacyOS Multi-Tenant Architecture)
 CREATE TABLE IF NOT EXISTS offices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     code VARCHAR(20) UNIQUE NOT NULL,
+    slug VARCHAR(50) UNIQUE,
     name VARCHAR(100) NOT NULL,
     address TEXT NOT NULL,
     location GEOGRAPHY(POINT, 4326) NOT NULL, -- Exact GPS coordinates
     geofence_radius_meters INT DEFAULT 30,
     timezone VARCHAR(50) DEFAULT 'Africa/Lagos',
     team_leader_id UUID,
+    logo_url TEXT,
+    description TEXT,
+    phone VARCHAR(30),
+    whatsapp_number VARCHAR(30),
+    website_url TEXT,
+    primary_brand_color VARCHAR(20) DEFAULT '#6366f1',
+    secondary_brand_color VARCHAR(20) DEFAULT '#8b5cf6',
+    subscription_plan_id VARCHAR(50) DEFAULT 'starter_monthly',
+    subscription_status VARCHAR(30) DEFAULT 'trial', -- 'trial', 'active', 'past_due', 'cancelled', 'expired'
+    trial_start_at TIMESTAMPTZ DEFAULT NOW(),
+    trial_end_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
+    billing_cycle VARCHAR(20) DEFAULT 'monthly', -- 'monthly', 'annual'
+    member_limit INT DEFAULT 49, -- Starter plan cap
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Idempotent column additions for existing installations
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS slug VARCHAR(50) UNIQUE;
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS phone VARCHAR(30);
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(30);
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS website_url TEXT;
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS primary_brand_color VARCHAR(20) DEFAULT '#6366f1';
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS secondary_brand_color VARCHAR(20) DEFAULT '#8b5cf6';
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS subscription_plan_id VARCHAR(50) DEFAULT 'starter_monthly';
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(30) DEFAULT 'trial';
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS trial_start_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS trial_end_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days');
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(20) DEFAULT 'monthly';
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS member_limit INT DEFAULT 49;
+
+-- Set default slugs for seeded offices
+UPDATE offices SET slug = 'godspeed-akure', whatsapp_number = '+2348000000000', description = 'GODSPEED HQ Akure Central Campus' WHERE code = 'HQ-AKR' AND slug IS NULL;
+UPDATE offices SET slug = 'godspeed-lagos', whatsapp_number = '+2348000000001', description = 'GODSPEED Lagos Ikeja Hub' WHERE code = 'HQ-LGS' AND slug IS NULL;
+UPDATE offices SET slug = 'godspeed-abuja', whatsapp_number = '+2348000000002', description = 'GODSPEED Abuja Hub' WHERE code = 'HQ-ABJ' AND slug IS NULL;
 
 -- 4. MEMBERS TABLE
 CREATE TABLE IF NOT EXISTS members (
@@ -242,13 +277,153 @@ CREATE TABLE IF NOT EXISTS notice_board (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 14. DIRECTOR NETWORKS TABLE (World Team Multi-Office Hierarchy)
+CREATE TABLE IF NOT EXISTS director_networks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    director_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 15. NETWORK OFFICES LINK TABLE
+CREATE TABLE IF NOT EXISTS network_offices (
+    network_id UUID NOT NULL REFERENCES director_networks(id) ON DELETE CASCADE,
+    office_id UUID NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+    linked_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (network_id, office_id)
+);
+
+-- 16. TRAINING CLASSES TABLE
+CREATE TABLE IF NOT EXISTS training_classes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    office_id UUID NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    tutor_id UUID REFERENCES members(id) ON DELETE SET NULL,
+    head_id UUID REFERENCES members(id) ON DELETE SET NULL,
+    schedule_info VARCHAR(150),
+    location_info VARCHAR(150),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 17. TRAINING CLASS MEMBERS TABLE
+CREATE TABLE IF NOT EXISTS training_class_members (
+    class_id UUID NOT NULL REFERENCES training_classes(id) ON DELETE CASCADE,
+    member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    stage VARCHAR(50) DEFAULT 'Beginner', -- 'Beginner', 'Foundation', 'Intermediate', 'Advanced', 'Leadership'
+    modules_completed INT DEFAULT 0,
+    total_modules INT DEFAULT 10,
+    assessment_score NUMERIC(5, 2) DEFAULT 0.00,
+    tutor_notes TEXT,
+    last_training_date DATE,
+    enrolled_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (class_id, member_id)
+);
+
+-- 18. TRAINING SESSIONS TABLE
+CREATE TABLE IF NOT EXISTS training_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    class_id UUID NOT NULL REFERENCES training_classes(id) ON DELETE CASCADE,
+    session_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME,
+    topic VARCHAR(200) NOT NULL,
+    tutor_id UUID REFERENCES members(id) ON DELETE SET NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 19. TRAINING ATTENDANCE TABLE
+CREATE TABLE IF NOT EXISTS training_attendance (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES training_sessions(id) ON DELETE CASCADE,
+    member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'present', -- 'present', 'absent', 'excused', 'late'
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (session_id, member_id)
+);
+
+-- 20. SUBSCRIPTION PLANS TABLE
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    tier VARCHAR(30) NOT NULL, -- 'starter', 'growth'
+    billing_interval VARCHAR(20) NOT NULL, -- 'monthly', 'annual'
+    price_ngn NUMERIC(12, 2) NOT NULL,
+    member_limit INT NOT NULL,
+    features JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed Default Subscription Plans
+INSERT INTO subscription_plans (id, name, tier, billing_interval, price_ngn, member_limit, features)
+VALUES
+  ('starter_monthly', 'Starter Monthly', 'starter', 'monthly', 7500.00, 49, '["Up to 49 Members", "QR Code Attendance", "Earnings Leaderboard", "Training Classes", "Custom Office Web Address", "Automated Reminders"]'::jsonb),
+  ('growth_monthly', 'Growth Monthly', 'growth', 'monthly', 18000.00, 999999, '["Unlimited Members", "QR Code Attendance", "Earnings Leaderboard", "Training Classes & Tutors", "Multi-Office Linking (World Team)", "Dedicated WhatsApp Support"]'::jsonb),
+  ('starter_annual', 'Starter Annual', 'starter', 'annual', 75000.00, 49, '["Up to 49 Members", "2 Months Free", "QR Code Attendance", "Earnings Leaderboard", "Training Classes", "Custom Office Web Address", "Automated Reminders"]'::jsonb),
+  ('growth_annual', 'Growth Annual', 'growth', 'annual', 180000.00, 999999, '["Unlimited Members", "2 Months Free", "QR Code Attendance", "Earnings Leaderboard", "Training Classes & Tutors", "Multi-Office Linking (World Team)", "Dedicated WhatsApp Support"]'::jsonb)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  price_ngn = EXCLUDED.price_ngn,
+  member_limit = EXCLUDED.member_limit,
+  features = EXCLUDED.features;
+
+-- 21. SUBSCRIPTIONS TABLE
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    office_id UUID UNIQUE NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+    plan_id VARCHAR(50) NOT NULL REFERENCES subscription_plans(id),
+    status VARCHAR(30) NOT NULL DEFAULT 'trial', -- 'trial', 'active', 'past_due', 'cancelled', 'expired'
+    trial_start TIMESTAMPTZ DEFAULT NOW(),
+    trial_end TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
+    current_period_start TIMESTAMPTZ DEFAULT NOW(),
+    current_period_end TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
+    cancel_at_period_end BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 22. SUBSCRIPTION EVENTS & AUDIT LOG TABLE
+CREATE TABLE IF NOT EXISTS subscription_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    office_id UUID NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL, -- 'trial_started', 'subscribed', 'renewed', 'plan_changed', 'cancelled', 'payment_failed'
+    amount_paid NUMERIC(12, 2) DEFAULT 0.00,
+    currency VARCHAR(10) DEFAULT 'NGN',
+    reference VARCHAR(100),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 23. NOTIFICATIONS & REMINDERS TABLE
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    member_id UUID REFERENCES members(id) ON DELETE CASCADE, -- Null if broadcast to entire office
+    office_id UUID REFERENCES offices(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL, -- 'attendance_reminder', 'training_reminder', 'due_reminder', 'trial_reminder', 'celebration', 'system'
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    action_url TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Seed Default Offices with valid UUIDs (Official HQ Akure as primary)
-INSERT INTO offices (id, code, name, address, location, geofence_radius_meters, timezone)
+INSERT INTO offices (id, code, slug, name, address, location, geofence_radius_meters, timezone, whatsapp_number, description)
 VALUES 
-  ('33333333-3333-3333-3333-333333333333', 'HQ-AKR', 'GODSPEED HQ Akure', 'Akure, Ondo State, Nigeria', ST_SetSRID(ST_MakePoint(5.2058, 7.2571), 4326)::geography, 30, 'Africa/Lagos'),
-  ('11111111-1111-1111-1111-111111111111', 'HQ-LGS', 'GODSPEED HQ Ikeja', 'Ikeja, Lagos, Nigeria', ST_SetSRID(ST_MakePoint(3.3515, 6.6018), 4326)::geography, 30, 'Africa/Lagos'),
-  ('22222222-2222-2222-2222-222222222222', 'HQ-ABJ', 'GODSPEED Abuja Hub', 'Abuja, Nigeria', ST_SetSRID(ST_MakePoint(7.3986, 9.0765), 4326)::geography, 40, 'Africa/Lagos')
-ON CONFLICT (code) DO NOTHING;
+  ('33333333-3333-3333-3333-333333333333', 'HQ-AKR', 'godspeed-akure', 'GODSPEED HQ Akure', 'Akure, Ondo State, Nigeria', ST_SetSRID(ST_MakePoint(5.2058, 7.2571), 4326)::geography, 30, 'Africa/Lagos', '+2348000000000', 'GODSPEED HQ Akure Central Campus'),
+  ('11111111-1111-1111-1111-111111111111', 'HQ-LGS', 'godspeed-lagos', 'GODSPEED HQ Ikeja', 'Ikeja, Lagos, Nigeria', ST_SetSRID(ST_MakePoint(3.3515, 6.6018), 4326)::geography, 30, 'Africa/Lagos', '+2348000000001', 'GODSPEED Lagos Ikeja Hub'),
+  ('22222222-2222-2222-2222-222222222222', 'HQ-ABJ', 'godspeed-abuja', 'GODSPEED Abuja Hub', 'Abuja, Nigeria', ST_SetSRID(ST_MakePoint(7.3986, 9.0765), 4326)::geography, 40, 'Africa/Lagos', '+2348000000002', 'GODSPEED Abuja Hub')
+ON CONFLICT (code) DO UPDATE SET
+  slug = EXCLUDED.slug,
+  whatsapp_number = EXCLUDED.whatsapp_number,
+  description = EXCLUDED.description;
 
 -- ============================================================================
 -- SECURITY DEFINER HELPER FUNCTIONS (Prevent 42P17 Infinite Recursion)
@@ -468,6 +643,7 @@ BEGIN
     SELECT id INTO v_office_id
     FROM public.offices
     WHERE id::text = v_raw_office
+       OR slug = v_raw_office
        OR code = v_raw_office
        OR code = CASE 
             WHEN v_raw_office = 'OFF-AKR' THEN 'HQ-AKR'
@@ -917,3 +1093,240 @@ CREATE POLICY "Notice board update policy" ON notice_board
 
 CREATE POLICY "Notice board delete policy" ON notice_board
     FOR DELETE USING (public.is_super_admin(auth.uid()));
+
+-- ============================================================================
+-- 12. LEGACYOS HELPER FUNCTIONS
+-- ============================================================================
+
+-- Helper: Check if user is Director of a Network containing an Office
+CREATE OR REPLACE FUNCTION public.is_director_of_office(p_user_id UUID DEFAULT auth.uid(), p_office_id UUID DEFAULT NULL)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_user_id IS NULL OR p_office_id IS NULL THEN RETURN FALSE; END IF;
+    RETURN EXISTS (
+        SELECT 1 FROM public.director_networks dn
+        JOIN public.network_offices no ON no.network_id = dn.id
+        WHERE dn.director_id = p_user_id AND no.office_id = p_office_id
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- ============================================================================
+-- 13. SERVER-SIDE MEMBER LIMIT ENFORCEMENT TRIGGER (LegacyOS Plan Bounds)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.enforce_office_member_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_limit INT;
+    v_current_count INT;
+BEGIN
+    IF NEW.primary_office_id IS NULL THEN RETURN NEW; END IF;
+
+    SELECT COALESCE(member_limit, 49) INTO v_limit
+    FROM public.offices
+    WHERE id = NEW.primary_office_id;
+
+    IF v_limit IS NOT NULL AND v_limit < 999999 THEN
+        SELECT COUNT(*) INTO v_current_count
+        FROM public.members
+        WHERE primary_office_id = NEW.primary_office_id AND is_active = TRUE;
+
+        IF v_current_count >= v_limit THEN
+            RAISE EXCEPTION 'Cannot register member: Office has reached its Starter plan limit (% members). Upgrade to Growth plan for unlimited members.', v_limit;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_enforce_office_member_limit ON public.members;
+CREATE TRIGGER trg_enforce_office_member_limit
+    BEFORE INSERT ON public.members
+    FOR EACH ROW EXECUTE FUNCTION public.enforce_office_member_limit();
+
+-- ============================================================================
+-- 14. TOP-EARNER MILESTONE CELEBRATION TRIGGER
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.celebrate_top_earner()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_member_name TEXT;
+    v_office_id UUID;
+BEGIN
+    SELECT full_name, primary_office_id INTO v_member_name, v_office_id
+    FROM public.members WHERE id = NEW.member_id;
+
+    IF NEW.gross_amount >= 50000.00 AND v_office_id IS NOT NULL THEN
+        INSERT INTO public.notifications (
+            office_id, type, title, message, action_url
+        ) VALUES (
+            v_office_id,
+            'celebration',
+            '🎉 Big Earner Milestone!',
+            COALESCE(v_member_name, 'A member') || ' just recorded ₦' || TO_CHAR(NEW.gross_amount, 'FM999,999,999.00') || ' in earnings!',
+            '/leaderboard'
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_celebrate_top_earner ON public.earnings_ledger;
+CREATE TRIGGER trg_celebrate_top_earner
+    AFTER INSERT ON public.earnings_ledger
+    FOR EACH ROW EXECUTE FUNCTION public.celebrate_top_earner();
+
+-- ============================================================================
+-- 15. RLS POLICIES FOR NEW LEGACYOS MODULES
+-- ============================================================================
+
+-- A. DIRECTOR NETWORKS POLICIES
+ALTER TABLE public.director_networks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Director networks select policy" ON director_networks
+    FOR SELECT USING (
+        director_id = auth.uid() 
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Director networks write policy" ON director_networks
+    FOR ALL USING (
+        director_id = auth.uid() 
+     OR public.is_super_admin(auth.uid())
+    );
+
+-- B. NETWORK OFFICES POLICIES
+ALTER TABLE public.network_offices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Network offices select policy" ON network_offices
+    FOR SELECT USING (
+        EXISTS (SELECT 1 FROM director_networks dn WHERE dn.id = network_id AND dn.director_id = auth.uid())
+     OR public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Network offices write policy" ON network_offices
+    FOR ALL USING (
+        EXISTS (SELECT 1 FROM director_networks dn WHERE dn.id = network_id AND dn.director_id = auth.uid())
+     OR public.is_super_admin(auth.uid())
+    );
+
+-- C. TRAINING CLASSES POLICIES
+ALTER TABLE public.training_classes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Training classes select policy" ON training_classes
+    FOR SELECT USING (
+        office_id = public.get_user_office_id(auth.uid())
+     OR public.is_director_of_office(auth.uid(), office_id)
+     OR public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Training classes write policy" ON training_classes
+    FOR ALL USING (
+        public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+-- D. TRAINING CLASS MEMBERS POLICIES
+ALTER TABLE public.training_class_members ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Training class members select policy" ON training_class_members
+    FOR SELECT USING (
+        member_id = auth.uid()
+     OR EXISTS (SELECT 1 FROM training_classes tc WHERE tc.id = class_id AND (tc.office_id = public.get_user_office_id(auth.uid()) OR public.is_office_team_leader(auth.uid(), tc.office_id) OR public.is_director_of_office(auth.uid(), tc.office_id)))
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Training class members write policy" ON training_class_members
+    FOR ALL USING (
+        EXISTS (SELECT 1 FROM training_classes tc WHERE tc.id = class_id AND (public.is_office_team_leader(auth.uid(), tc.office_id) OR tc.tutor_id = auth.uid() OR tc.head_id = auth.uid()))
+     OR public.is_super_admin(auth.uid())
+    );
+
+-- E. TRAINING SESSIONS & ATTENDANCE POLICIES
+ALTER TABLE public.training_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.training_attendance ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Training sessions select policy" ON training_sessions
+    FOR SELECT USING (
+        EXISTS (SELECT 1 FROM training_classes tc WHERE tc.id = class_id AND (tc.office_id = public.get_user_office_id(auth.uid()) OR public.is_office_team_leader(auth.uid(), tc.office_id) OR public.is_director_of_office(auth.uid(), tc.office_id)))
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Training sessions write policy" ON training_sessions
+    FOR ALL USING (
+        EXISTS (SELECT 1 FROM training_classes tc WHERE tc.id = class_id AND (public.is_office_team_leader(auth.uid(), tc.office_id) OR tc.tutor_id = auth.uid()))
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Training attendance select policy" ON training_attendance
+    FOR SELECT USING (
+        member_id = auth.uid()
+     OR EXISTS (SELECT 1 FROM training_sessions ts JOIN training_classes tc ON tc.id = ts.class_id WHERE ts.id = session_id AND (public.is_office_team_leader(auth.uid(), tc.office_id) OR tc.tutor_id = auth.uid() OR public.is_director_of_office(auth.uid(), tc.office_id)))
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Training attendance write policy" ON training_attendance
+    FOR ALL USING (
+        EXISTS (SELECT 1 FROM training_sessions ts JOIN training_classes tc ON tc.id = ts.class_id WHERE ts.id = session_id AND (public.is_office_team_leader(auth.uid(), tc.office_id) OR tc.tutor_id = auth.uid()))
+     OR public.is_super_admin(auth.uid())
+    );
+
+-- F. SUBSCRIPTIONS & PLANS POLICIES
+ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscription_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Subscription plans public read" ON subscription_plans
+    FOR SELECT USING (TRUE);
+
+CREATE POLICY "Subscriptions select policy" ON subscriptions
+    FOR SELECT USING (
+        public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_director_of_office(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Subscriptions write policy" ON subscriptions
+    FOR ALL USING (
+        public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Subscription events select policy" ON subscription_events
+    FOR SELECT USING (
+        public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Subscription events write policy" ON subscription_events
+    FOR ALL USING (public.is_super_admin(auth.uid()));
+
+-- G. NOTIFICATIONS POLICIES
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Notifications select policy" ON notifications
+    FOR SELECT USING (
+        member_id = auth.uid()
+     OR (member_id IS NULL AND office_id = public.get_user_office_id(auth.uid()))
+     OR public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Notifications update policy" ON notifications
+    FOR UPDATE USING (
+        member_id = auth.uid()
+     OR public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Notifications write policy" ON notifications
+    FOR INSERT WITH CHECK (
+        public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
