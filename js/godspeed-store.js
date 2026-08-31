@@ -1088,4 +1088,7 @@ class GodspeedStore {
   }
 }
 
-window.godspeedStore = new GodspeedStore();
+window.GodspeedStore = GodspeedStore;
+if (!window.godspeedStore) {
+  window.godspeedStore = new GodspeedStore();
+}

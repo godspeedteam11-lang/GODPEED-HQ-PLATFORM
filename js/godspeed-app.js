@@ -3,7 +3,17 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  const store = window.godspeedStore;
+  // Fail-Safe Data Store Resolver
+  function getStore() {
+    if (window.godspeedStore) return window.godspeedStore;
+    if (typeof GodspeedStore !== 'undefined') {
+      window.godspeedStore = new GodspeedStore();
+      return window.godspeedStore;
+    }
+    return null;
+  }
+
+  const store = getStore();
 
   // Active View Route State
   let currentRoute = '/';
@@ -118,7 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
           }
 
-          const authRes = await store.authenticateUser(email, password);
+          const activeStore = getStore();
+          if (!activeStore) {
+            alert('System error: Data store is still initializing. Please wait a moment and try again.');
+            return;
+          }
+
+          const authRes = await activeStore.authenticateUser(email, password);
           if (authRes.success) {
             const memberName = (authRes.member && authRes.member.name) ? authRes.member.name : 'Member';
             showToast(`Welcome back, ${memberName}!`);
@@ -183,7 +199,13 @@ document.addEventListener('DOMContentLoaded', () => {
           submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
         }
 
-        const regRes = await store.registerMember(name, email, phone, password, sponsor, office);
+        const activeStore = getStore();
+        if (!activeStore) {
+          alert('System error: Data store is still initializing. Please wait 2 seconds and click again.');
+          return;
+        }
+
+        const regRes = await activeStore.registerMember(name, email, phone, password, sponsor, office);
         console.log('registerMember response:', regRes);
         
         if (regRes.success) {
@@ -193,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
             routeTo('/login');
           } else {
             showToast(`Account created! Welcome to GODSPEED HQ, ${name}.`);
-            const perms = store.getUserPermissions();
+            const perms = activeStore.getUserPermissions();
             routeTo(perms.defaultRoute || '/dashboard');
           }
         } else {
