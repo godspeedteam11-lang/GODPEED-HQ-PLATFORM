@@ -1397,72 +1397,55 @@ class GodspeedStore {
     };
   }
 
-  /* 2. SaaS Tenant Office Onboarding (PRD & SaaS Spec §7) */
+  /* 2. SaaS Tenant Office Onboarding (PRD & SaaS Spec §4 & §7) */
   async createTenantOffice(officeData) {
     if (!window.godspeedSupabase) {
       return { success: false, message: 'Supabase client is not connected.' };
     }
 
-    const { name, slug, address, phone, whatsappNumber, websiteUrl, leaderName, leaderEmail, leaderPhone, planId = 'starter_monthly' } = officeData;
+    const { name, slug, address, phone, whatsappNumber, websiteUrl, planId = 'starter_monthly' } = officeData;
     if (!name || !slug) {
       return { success: false, message: 'Office name and web address slug are required.' };
     }
 
-    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-
     try {
-      const officeCode = 'OFF-' + Math.floor(1000 + Math.random() * 9000);
-      const isAnnual = planId.includes('annual');
-      const memberLimit = planId.includes('growth') ? 999999 : 49;
+      // Call Atomic PostgreSQL RPC
+      const { data: rpcRes, error: rpcErr } = await window.godspeedSupabase.rpc('create_tenant_office', {
+        p_name: name.trim(),
+        p_slug: slug.trim(),
+        p_address: address || 'Main Office Hall',
+        p_phone: phone || '',
+        p_whatsapp: whatsappNumber || '',
+        p_website: websiteUrl || '',
+        p_plan_id: planId
+      });
 
-      const { data: newOffice, error: officeErr } = await window.godspeedSupabase
-        .from('offices')
-        .insert({
-          code: officeCode,
-          slug: cleanSlug,
-          name: name.trim(),
-          address: address || 'Main City Office',
-          location: `SRID=4326;POINT(5.2058 7.2571)`,
-          phone: phone || '',
-          whatsapp_number: whatsappNumber || '',
-          website_url: websiteUrl || '',
-          subscription_plan_id: planId,
-          subscription_status: 'trial',
-          trial_start_at: new Date().toISOString(),
-          trial_end_at: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
-          billing_cycle: isAnnual ? 'annual' : 'monthly',
-          member_limit: memberLimit
-        })
-        .select()
-        .single();
-
-      if (officeErr) {
-        return { success: false, message: 'Office Creation Failed: ' + officeErr.message };
+      if (rpcErr) {
+        return { success: false, message: rpcErr.message };
       }
 
-      // Initialize Subscription Row
-      await window.godspeedSupabase.from('subscriptions').insert({
-        office_id: newOffice.id,
-        plan_id: planId,
-        status: 'trial',
-        trial_start: new Date().toISOString(),
-        trial_end: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
-        current_period_start: new Date().toISOString(),
-        current_period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString()
-      });
-
-      // Audit Subscription Event
-      await window.godspeedSupabase.from('subscription_events').insert({
-        office_id: newOffice.id,
-        event_type: 'trial_started',
-        amount_paid: 0.00,
-        notes: `30-day free trial started for ${name}`
-      });
-
       await this.loadAllAppData();
-      return { success: true, office: this.normalizeOffice(newOffice), message: `Office "${name}" created successfully with 30-day free trial!` };
+      const createdOffice = this.offices.find(o => o.id === rpcRes.office_id) || rpcRes;
+      return { 
+        success: true, 
+        office: createdOffice, 
+        message: rpcRes.message || `Office "${name}" created successfully with 30-day free trial!` 
+      };
     } catch (err) {
       return { success: false, message: err.message || 'Unexpected office creation error' };
+    }
+  }
+
+  /* Automated Reminders Engine (PRD & SaaS Spec §12) */
+  async runAutomatedReminders() {
+    if (!window.godspeedSupabase) return;
+    try {
+      const { data, error } = await window.godspeedSupabase.rpc('process_automated_reminders');
+      if (data && data.generated_reminders > 0) {
+        await this.loadAllAppData();
+      }
+    } catch (err) {
+      console.warn('Reminder process non-blocking notice:', err.message);
     }
   }
 

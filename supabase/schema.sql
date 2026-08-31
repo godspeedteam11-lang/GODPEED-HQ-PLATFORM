@@ -633,38 +633,47 @@ DECLARE
     v_office_id UUID;
     v_sponsor_uuid UUID;
     v_raw_office TEXT;
+    v_user_role public.user_role := 'member';
 BEGIN
     v_raw_office := COALESCE(
         NEW.raw_user_meta_data->>'office_id',
         NEW.raw_user_meta_data->>'office',
-        'HQ-AKR'
+        NEW.raw_user_meta_data->>'office_slug',
+        NEW.raw_user_meta_data->>'tenant'
     );
 
+    IF v_raw_office IS NULL OR TRIM(v_raw_office) = '' THEN
+        RAISE EXCEPTION 'Signup Error: Office identifier is required for tenant registration.';
+    END IF;
+
+    -- Strict Tenant Resolution: Must match UUID, Slug, or Official Code
     SELECT id INTO v_office_id
     FROM public.offices
-    WHERE id::text = v_raw_office
-       OR slug = v_raw_office
-       OR code = v_raw_office
-       OR code = CASE 
+    WHERE (id::text = v_raw_office)
+       OR (LOWER(slug) = LOWER(TRIM(v_raw_office)))
+       OR (UPPER(code) = UPPER(TRIM(v_raw_office)))
+       OR (code = CASE 
             WHEN v_raw_office = 'OFF-AKR' THEN 'HQ-AKR'
             WHEN v_raw_office = 'OFF-101' THEN 'HQ-LGS'
             WHEN v_raw_office = 'OFF-102' THEN 'HQ-ABJ'
             ELSE NULL
-          END;
+          END);
 
     IF v_office_id IS NULL THEN
-        SELECT id INTO v_office_id FROM public.offices WHERE code = 'HQ-AKR';
+        RAISE EXCEPTION 'Signup Error: Target office/tenant "%" does not exist or is inactive.', v_raw_office;
     END IF;
 
-    IF v_office_id IS NULL THEN
-        SELECT id INTO v_office_id FROM public.offices LIMIT 1;
-    END IF;
-
-    IF NEW.raw_user_meta_data->>'sponsor' IS NOT NULL AND NEW.raw_user_meta_data->>'sponsor' <> '' THEN
+    -- Optional Sponsor Resolution (Case-insensitive code, email, or UUID)
+    IF NEW.raw_user_meta_data->>'sponsor' IS NOT NULL AND TRIM(NEW.raw_user_meta_data->>'sponsor') <> '' THEN
         SELECT id INTO v_sponsor_uuid FROM public.members 
-        WHERE member_code = UPPER(NEW.raw_user_meta_data->>'sponsor') 
-           OR LOWER(email) = LOWER(NEW.raw_user_meta_data->>'sponsor')
-           OR id::text = NEW.raw_user_meta_data->>'sponsor';
+        WHERE member_code = UPPER(TRIM(NEW.raw_user_meta_data->>'sponsor')) 
+           OR LOWER(email) = LOWER(TRIM(NEW.raw_user_meta_data->>'sponsor'))
+           OR id::text = TRIM(NEW.raw_user_meta_data->>'sponsor');
+    END IF;
+
+    -- If created via Owner Onboarding
+    IF NEW.raw_user_meta_data->>'is_office_owner' = 'true' THEN
+        v_user_role := 'team_leader';
     END IF;
 
     INSERT INTO public.members (
@@ -680,21 +689,21 @@ BEGIN
         onboarding_completed
     ) VALUES (
         NEW.id,
-        'GSD-' || UPPER(SUBSTRING(NEW.id::text FROM 1 FOR 8)),
-        COALESCE(NEW.raw_user_meta_data->>'full_name', 'New Member'),
+        'LEG-' || UPPER(SUBSTRING(NEW.id::text FROM 1 FOR 8)),
+        COALESCE(NEW.raw_user_meta_data->>'full_name', 'Member'),
         NEW.email,
         COALESCE(NEW.raw_user_meta_data->>'phone', ''),
         v_sponsor_uuid,
-        'member'::user_role,
+        v_user_role,
         'newbie'::neolife_rank,
         v_office_id,
         FALSE
     )
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT (id) DO UPDATE SET
+        primary_office_id = EXCLUDED.primary_office_id,
+        full_name = COALESCE(EXCLUDED.full_name, public.members.full_name),
+        phone = COALESCE(EXCLUDED.phone, public.members.phone);
 
-    RETURN NEW;
-EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'handle_new_user_signup exception: %', SQLERRM;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
@@ -1330,3 +1339,391 @@ CREATE POLICY "Notifications write policy" ON notifications
         public.is_office_team_leader(auth.uid(), office_id)
      OR public.is_super_admin(auth.uid())
     );
+
+-- ============================================================================
+-- 16. SERVER-SIDE TENANT ONBOARDING RPC (PRD & SaaS Spec §4 / §7)
+-- Atomic Office Creation, 30-Day Free Trial, and Team Leader Role Assignment
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.create_tenant_office(
+    p_name TEXT,
+    p_slug TEXT,
+    p_address TEXT DEFAULT 'Main Office Hall',
+    p_phone TEXT DEFAULT '',
+    p_whatsapp TEXT DEFAULT '',
+    p_website TEXT DEFAULT '',
+    p_plan_id TEXT DEFAULT 'starter_monthly'
+) RETURNS JSONB AS $$
+DECLARE
+    v_caller_id UUID := auth.uid();
+    v_clean_slug TEXT;
+    v_office_code TEXT;
+    v_new_office public.offices%ROWTYPE;
+    v_member_limit INT := 49;
+    v_is_annual BOOLEAN;
+BEGIN
+    IF v_caller_id IS NULL THEN
+        RAISE EXCEPTION 'Authentication required: You must be signed in to create an office.';
+    END IF;
+
+    IF p_name IS NULL OR TRIM(p_name) = '' THEN
+        RAISE EXCEPTION 'Validation Error: Office name cannot be empty.';
+    END IF;
+
+    IF p_slug IS NULL OR TRIM(p_slug) = '' THEN
+        RAISE EXCEPTION 'Validation Error: Office slug URL identifier cannot be empty.';
+    END IF;
+
+    -- Normalize slug: lowercase alphanumeric + hyphen
+    v_clean_slug := LOWER(REGEXP_REPLACE(TRIM(p_slug), '[^a-z0-9-]', '-', 'g'));
+    v_clean_slug := TRIM(BOTH '-' FROM v_clean_slug);
+
+    IF EXISTS (SELECT 1 FROM public.offices WHERE LOWER(slug) = v_clean_slug) THEN
+        RAISE EXCEPTION 'Office URL slug "%" is already taken. Please choose a unique web address.', v_clean_slug;
+    END IF;
+
+    v_office_code := 'OFF-' || UPPER(SUBSTRING(MD5(RANDOM()::text) FROM 1 FOR 6));
+    v_is_annual := p_plan_id LIKE '%annual%';
+    IF p_plan_id LIKE '%growth%' THEN
+        v_member_limit := 999999;
+    END IF;
+
+    -- 1. Create Office Record with 30-Day Free Trial
+    INSERT INTO public.offices (
+        code,
+        slug,
+        name,
+        address,
+        phone,
+        whatsapp_number,
+        website_url,
+        team_leader_id,
+        subscription_plan_id,
+        subscription_status,
+        trial_start_at,
+        trial_end_at,
+        billing_cycle,
+        member_limit,
+        location,
+        geofence_radius_meters,
+        is_active
+    ) VALUES (
+        v_office_code,
+        v_clean_slug,
+        TRIM(p_name),
+        COALESCE(NULLIF(TRIM(p_address), ''), 'Main Office Hall'),
+        COALESCE(TRIM(p_phone), ''),
+        COALESCE(TRIM(p_whatsapp), ''),
+        COALESCE(TRIM(p_website), ''),
+        v_caller_id,
+        p_plan_id,
+        'trial',
+        NOW(),
+        NOW() + INTERVAL '30 days',
+        CASE WHEN v_is_annual THEN 'annual' ELSE 'monthly' END,
+        v_member_limit,
+        'SRID=4326;POINT(5.2058 7.2571)'::geography,
+        30,
+        TRUE
+    ) RETURNING * INTO v_new_office;
+
+    -- 2. Promote Caller to Team Leader of this Office
+    UPDATE public.members
+    SET role = 'team_leader'::user_role,
+        primary_office_id = v_new_office.id,
+        onboarding_completed = TRUE
+    WHERE id = v_caller_id;
+
+    -- 3. Initialize Subscription Record
+    INSERT INTO public.subscriptions (
+        office_id,
+        plan_id,
+        status,
+        billing_cycle,
+        trial_start,
+        trial_end,
+        current_period_start,
+        current_period_end
+    ) VALUES (
+        v_new_office.id,
+        p_plan_id,
+        'trial',
+        CASE WHEN v_is_annual THEN 'annual' ELSE 'monthly' END,
+        NOW(),
+        NOW() + INTERVAL '30 days',
+        NOW(),
+        NOW() + INTERVAL '30 days'
+    );
+
+    -- 4. Audit Subscription Event
+    INSERT INTO public.subscription_events (
+        office_id,
+        event_type,
+        amount_paid,
+        notes
+    ) VALUES (
+        v_new_office.id,
+        'trial_started',
+        0.00,
+        '30-Day Free Trial initiated for ' || v_new_office.name
+    );
+
+    -- 5. Send Welcome Notification
+    INSERT INTO public.notifications (
+        member_id,
+        office_id,
+        type,
+        title,
+        message,
+        action_url
+    ) VALUES (
+        v_caller_id,
+        v_new_office.id,
+        'system',
+        '🚀 Welcome to LegacyOS!',
+        'Your office "' || v_new_office.name || '" is now live with a 30-day free trial. Share your link: /#/o/' || v_clean_slug || '/join',
+        '/office-settings'
+    );
+
+    RETURN jsonb_build_object(
+        'success', TRUE,
+        'office_id', v_new_office.id,
+        'name', v_new_office.name,
+        'slug', v_new_office.slug,
+        'code', v_new_office.code,
+        'member_limit', v_new_office.member_limit,
+        'trial_end_at', v_new_office.trial_end_at,
+        'message', 'Office created successfully with 30-day free trial!'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- ============================================================================
+-- 17. PAYMENT TRANSACTIONS & PAYSTACK WEBHOOK HANDLER (PRD & SaaS Spec §11)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.payment_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    office_id UUID NOT NULL REFERENCES public.offices(id) ON DELETE CASCADE,
+    payer_id UUID REFERENCES public.members(id) ON DELETE SET NULL,
+    provider TEXT NOT NULL DEFAULT 'paystack',
+    reference TEXT NOT NULL UNIQUE,
+    amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+    currency TEXT NOT NULL DEFAULT 'NGN',
+    plan_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'success', 'failed', 'abandoned')),
+    provider_response JSONB,
+    paid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.payment_transactions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Payment transactions select policy" ON payment_transactions
+    FOR SELECT USING (
+        public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE POLICY "Payment transactions insert policy" ON payment_transactions
+    FOR INSERT WITH CHECK (
+        public.is_office_team_leader(auth.uid(), office_id)
+     OR public.is_super_admin(auth.uid())
+    );
+
+CREATE OR REPLACE FUNCTION public.handle_paystack_webhook(
+    p_reference TEXT,
+    p_event TEXT,
+    p_payload JSONB
+) RETURNS JSONB AS $$
+DECLARE
+    v_tx public.payment_transactions%ROWTYPE;
+    v_office public.offices%ROWTYPE;
+    v_period_interval INTERVAL;
+BEGIN
+    SELECT * INTO v_tx FROM public.payment_transactions WHERE reference = p_reference;
+    IF v_tx.id IS NULL THEN
+        RAISE EXCEPTION 'Transaction reference % not found', p_reference;
+    END IF;
+
+    IF p_event = 'charge.success' THEN
+        SELECT * INTO v_office FROM public.offices WHERE id = v_tx.office_id;
+        v_period_interval := CASE WHEN v_tx.plan_id LIKE '%annual%' THEN INTERVAL '1 year' ELSE INTERVAL '1 month' END;
+
+        -- 1. Update Payment Transaction
+        UPDATE public.payment_transactions
+        SET status = 'success',
+            paid_at = NOW(),
+            provider_response = p_payload
+        WHERE id = v_tx.id;
+
+        -- 2. Update Office Subscription Status
+        UPDATE public.offices
+        SET subscription_status = 'active',
+            subscription_plan_id = v_tx.plan_id,
+            billing_cycle = CASE WHEN v_tx.plan_id LIKE '%annual%' THEN 'annual' ELSE 'monthly' END,
+            member_limit = CASE WHEN v_tx.plan_id LIKE '%growth%' THEN 999999 ELSE 49 END,
+            updated_at = NOW()
+        WHERE id = v_tx.office_id;
+
+        -- 3. Update Subscriptions Ledger
+        UPDATE public.subscriptions
+        SET status = 'active',
+            plan_id = v_tx.plan_id,
+            current_period_start = NOW(),
+            current_period_end = NOW() + v_period_interval,
+            updated_at = NOW()
+        WHERE office_id = v_tx.office_id;
+
+        -- 4. Audit Subscription Event
+        INSERT INTO public.subscription_events (
+            office_id, event_type, amount_paid, notes
+        ) VALUES (
+            v_tx.office_id, 'payment_received', v_tx.amount, 'Paystack payment reference: ' || p_reference
+        );
+
+        -- 5. Notify Office Owner
+        INSERT INTO public.notifications (
+            office_id, type, title, message, action_url
+        ) VALUES (
+            v_tx.office_id,
+            'system',
+            '💳 Subscription Payment Confirmed',
+            'Your payment of ₦' || TO_CHAR(v_tx.amount, 'FM999,999.00') || ' was verified. Your ' || v_tx.plan_id || ' subscription is active.',
+            '/office-settings'
+        );
+
+        RETURN jsonb_build_object('success', TRUE, 'status', 'active');
+    ELSE
+        UPDATE public.payment_transactions
+        SET status = 'failed', provider_response = p_payload
+        WHERE id = v_tx.id;
+        RETURN jsonb_build_object('success', FALSE, 'status', 'failed');
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- ============================================================================
+-- 18. AUTOMATED SERVER-SIDE REMINDER ENGINE (PRD & SaaS Spec §12)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.process_automated_reminders()
+RETURNS JSONB AS $$
+DECLARE
+    v_reminders_count INT := 0;
+    r_office RECORD;
+    r_session RECORD;
+    r_due RECORD;
+BEGIN
+    -- 1. Trial Expiration Warnings (Expiring in <= 3 days)
+    FOR r_office IN 
+        SELECT id, name, trial_end_at, team_leader_id 
+        FROM public.offices 
+        WHERE subscription_status = 'trial' 
+          AND trial_end_at <= NOW() + INTERVAL '3 days'
+          AND trial_end_at > NOW()
+    LOOP
+        IF NOT EXISTS (
+            SELECT 1 FROM public.notifications 
+            WHERE office_id = r_office.id 
+              AND type = 'reminder' 
+              AND created_at >= NOW() - INTERVAL '24 hours'
+              AND title LIKE '%Trial Expiring%'
+        ) THEN
+            INSERT INTO public.notifications (
+                member_id, office_id, type, title, message, action_url
+            ) VALUES (
+                r_office.team_leader_id,
+                r_office.id,
+                'reminder',
+                '⏳ 30-Day Free Trial Expiring Soon',
+                'Your free trial for ' || r_office.name || ' ends in ' || EXTRACT(DAY FROM (r_office.trial_end_at - NOW())) || ' days. Choose a plan to maintain continuous access.',
+                '/office-settings'
+            );
+            v_reminders_count := v_reminders_count + 1;
+        END IF;
+    END LOOP;
+
+    -- 2. Training Session Today Reminders
+    FOR r_session IN
+        SELECT ts.id, ts.topic, ts.session_date, ts.start_time, tc.office_id, tc.name AS class_name
+        FROM public.training_sessions ts
+        JOIN public.training_classes tc ON tc.id = ts.class_id
+        WHERE ts.session_date = CURRENT_DATE
+    LOOP
+        IF NOT EXISTS (
+            SELECT 1 FROM public.notifications 
+            WHERE office_id = r_session.office_id 
+              AND type = 'reminder' 
+              AND created_at >= NOW() - INTERVAL '12 hours'
+              AND title LIKE '%Training Session Today%'
+        ) THEN
+            INSERT INTO public.notifications (
+                office_id, type, title, message, action_url
+            ) VALUES (
+                r_session.office_id,
+                'reminder',
+                '📚 Training Session Today: ' || r_session.class_name,
+                'Session on "' || r_session.topic || '" starts today at ' || r_session.start_time || '.',
+                '/training'
+            );
+            v_reminders_count := v_reminders_count + 1;
+        END IF;
+    END LOOP;
+
+    -- 3. Overdue Office Dues Reminders
+    FOR r_due IN
+        SELECT od.id, od.member_id, od.office_id, od.expected_amount_ngn, m.full_name
+        FROM public.office_dues od
+        JOIN public.members m ON m.id = od.member_id
+        WHERE od.status = 'overdue'
+    LOOP
+        IF NOT EXISTS (
+            SELECT 1 FROM public.notifications 
+            WHERE member_id = r_due.member_id 
+              AND type = 'reminder' 
+              AND created_at >= NOW() - INTERVAL '48 hours'
+              AND title LIKE '%Office Dues Overdue%'
+        ) THEN
+            INSERT INTO public.notifications (
+                member_id, office_id, type, title, message, action_url
+            ) VALUES (
+                r_due.member_id,
+                r_due.office_id,
+                'reminder',
+                '⚠️ Office Dues Overdue',
+                'Outstanding dues of ₦' || TO_CHAR(r_due.expected_amount_ngn, 'FM999,999.00') || ' are due for your office operations.',
+                '/dues'
+            );
+            v_reminders_count := v_reminders_count + 1;
+        END IF;
+    END LOOP;
+
+    RETURN jsonb_build_object('success', TRUE, 'generated_reminders', v_reminders_count);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- ============================================================================
+-- 19. SUPABASE REALTIME REPLICATION CONFIGURATION
+-- ============================================================================
+
+DO $$
+BEGIN
+    -- Add tables to realtime publication if not already present
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'earnings_ledger') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.earnings_ledger;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'notifications') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'training_sessions') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.training_sessions;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'training_attendance') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.training_attendance;
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    NULL; -- Safe fallback if publications are managed at project dashboard level
+END;
+$$;
+

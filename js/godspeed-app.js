@@ -112,11 +112,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setupUserIdentitySwitcher();
     setupDashboardSwitcher();
     setupSupabaseAuthListener();
+    setupRealtimeSubscriptions();
 
     window.addEventListener('hashchange', handleTenantUrlRouting);
 
     // Ensure session is synchronized before checking permissions
     await store.syncSupabaseSession();
+
+    // Trigger non-blocking automated reminders check
+    store.runAutomatedReminders().catch(() => {});
 
     // Check if URL has tenant slug routing
     const routedTenant = handleTenantUrlRouting();
@@ -2007,6 +2011,85 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
       });
+    }
+
+    // 8. Subscription Upgrade & Paystack Payment Modal
+    const modalUpgradePlan = document.getElementById('modal-upgrade-plan');
+    const btnOpenUpgradeModal = document.getElementById('btn-open-upgrade-plan-modal');
+    const btnCloseUpgradeModal = document.getElementById('btn-close-upgrade-plan');
+
+    if (btnOpenUpgradeModal) {
+      btnOpenUpgradeModal.addEventListener('click', () => {
+        if (modalUpgradePlan) modalUpgradePlan.classList.add('active');
+      });
+    }
+    if (btnCloseUpgradeModal) {
+      btnCloseUpgradeModal.addEventListener('click', () => {
+        if (modalUpgradePlan) modalUpgradePlan.classList.remove('active');
+      });
+    }
+
+    document.querySelectorAll('.btn-pay-plan').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const planId = e.currentTarget.getAttribute('data-plan');
+        const activeOfficeId = store.currentMember?.primary_office_id || store.currentMember?.officeId || store.offices[0]?.id;
+        const user = store.getCurrentUser();
+
+        if (!activeOfficeId || !user) {
+          alert('Please select an active office to renew.');
+          return;
+        }
+
+        if (modalUpgradePlan) modalUpgradePlan.classList.remove('active');
+        showToast('Launching Paystack secure gateway...');
+
+        if (window.legacyPaymentService) {
+          await window.legacyPaymentService.initiateSubscriptionPayment(
+            activeOfficeId,
+            planId,
+            user.email,
+            user.name,
+            (res) => {
+              showToast(`Payment successful! Reference: ${res.reference}. Plan activated.`);
+              renderOfficeSettingsPane();
+            },
+            () => {
+              showToast('Payment was not completed.');
+            }
+          );
+        }
+      });
+    });
+  }
+
+  /* Supabase Realtime Change Subscriptions (PRD & SaaS Spec §2 / §7) */
+  function setupRealtimeSubscriptions() {
+    if (!window.godspeedSupabase) return;
+
+    try {
+      window.godspeedSupabase
+        .channel('legacyos_realtime_feed')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'earnings_ledger' }, async () => {
+          await store.loadAllAppData();
+          if (currentRoute === '/leaderboard') renderLiveLeaderboard();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, async (payload) => {
+          await store.loadAllAppData();
+          if (payload.new && payload.new.title) {
+            showToast(`${payload.new.title}: ${payload.new.message}`);
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sessions' }, async () => {
+          await store.loadAllAppData();
+          if (currentRoute === '/training') renderTrainingPane();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'training_attendance' }, async () => {
+          await store.loadAllAppData();
+          if (currentRoute === '/training') renderTrainingPane();
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('Realtime subscription non-blocking notice:', err.message);
     }
   }
 

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GODSPEED HQ — Public & Member Portal</title>
-  <meta name="description" content="Unified operating platform for GODSPEED Team combining NeoLife MLM operations, digital freelancing, office administration, and leadership intelligence.">
+  <title>LegacyOS — Operating System for Personal Offices & Teams</title>
+  <meta name="description" content="LegacyOS is the complete operating platform for running personal offices, tracking attendance, automated dues, live earnings leaderboards, and training progression.">
 
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,8 +25,8 @@
       <div class="public-brand">
         <div class="brand-logo"><i class="fas fa-bolt"></i></div>
         <div class="brand-info">
-          <h1>GODSPEED HQ</h1>
-          <span>Unified Operating Platform</span>
+          <h1>LegacyOS</h1>
+          <span id="header-tenant-badge">Team & Hub Platform</span>
         </div>
       </div>
 
@@ -38,11 +38,11 @@
 
     <div class="public-hero">
       <div class="badge badge-blue" style="margin-bottom:1.25rem;">
-        <i class="fas fa-rocket"></i> GODSPEED Team Operating Platform
+        <i class="fas fa-rocket"></i> Powered by LegacyOS SaaS
       </div>
-      <h1 class="hero-title">Empowering Network Marketing & Digital Freelancing</h1>
+      <h1 class="hero-title">The Complete Operating System for Personal Teams & Offices</h1>
       <p class="hero-subtitle">
-        GODSPEED HQ is the single operating platform connecting NeoLife rank progression, client freelancing outreach, geofenced GPS attendance, office administration, and leadership development.
+        LegacyOS puts everything you're currently tracking in your head and WhatsApp groups into one unified system: live QR/GPS attendance, real-time earnings leaderboards, training curricula, and multi-office network intelligence.
       </p>
 
       <div style="display:flex; gap:1.25rem; justify-content:center; flex-wrap:wrap; margin-bottom: 3rem;">
@@ -894,6 +894,11 @@
                     </div>
                   </div>
 
+                  <!-- Subscription Upgrade / Payment Button -->
+                  <button type="button" class="btn btn-primary" id="btn-open-upgrade-plan-modal" style="width:100%; margin-bottom:1.25rem; justify-content:center;">
+                    <i class="fas fa-credit-card"></i> Upgrade Plan / Renew Subscription
+                  </button>
+
                   <!-- Direct Member Join URL Box -->
                   <div style="background:rgba(0,0,0,0.3); border:1px dashed var(--border-color); border-radius:var(--radius-sm); padding:0.85rem;">
                     <div style="font-size:0.8rem; color:#cbd5e1; font-weight:700; margin-bottom:0.25rem;">Your Office Public Join Link:</div>
@@ -1324,6 +1329,59 @@
     </div>
   </div>
 
+  <!-- MODAL 7: UPGRADE SUBSCRIPTION PLAN (Paystack Production Flow) -->
+  <div class="modal-overlay" id="modal-upgrade-plan">
+    <div class="modal-content" style="max-width:550px;">
+      <div class="modal-header">
+        <h3><i class="fas fa-credit-card" style="color:var(--status-green)"></i> Select Subscription Plan</h3>
+        <button class="close-btn" id="btn-close-upgrade-plan">&times;</button>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <p style="font-size:0.85rem; color:var(--text-muted);">
+          Upgrade your office subscription securely via Paystack. Automated receipt and instant plan activation.
+        </p>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.25rem;">
+        <!-- STARTER -->
+        <div class="card-panel" style="border:1px solid var(--border-color); padding:1rem; cursor:pointer; transition:all 0.2s;" id="opt-plan-starter">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <strong style="color:#fff; font-size:0.95rem;">Starter Plan</strong>
+            <span class="badge badge-blue">&lt; 50</span>
+          </div>
+          <div style="font-size:1.35rem; font-weight:800; color:#fff; margin-bottom:0.25rem;">₦7,500 <span style="font-size:0.75rem; color:var(--text-muted);">/mo</span></div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Or ₦75,000/yr (2 mos free)</div>
+          <button type="button" class="btn btn-secondary btn-sm btn-pay-plan" data-plan="starter_monthly" style="width:100%; font-size:0.8rem;">
+            Pay Monthly (₦7,500)
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm btn-pay-plan" data-plan="starter_annual" style="width:100%; margin-top:0.35rem; font-size:0.8rem;">
+            Pay Yearly (₦75,000)
+          </button>
+        </div>
+
+        <!-- GROWTH -->
+        <div class="card-panel" style="border:1px solid rgba(16,185,129,0.3); background:rgba(16,185,129,0.04); padding:1rem; cursor:pointer;" id="opt-plan-growth">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <strong style="color:#fff; font-size:0.95rem;">Growth Plan</strong>
+            <span class="badge badge-green">Unlimited</span>
+          </div>
+          <div style="font-size:1.35rem; font-weight:800; color:var(--status-green); margin-bottom:0.25rem;">₦18,000 <span style="font-size:0.75rem; color:var(--text-muted);">/mo</span></div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Or ₦180,000/yr (2 mos free)</div>
+          <button type="button" class="btn btn-primary btn-sm btn-pay-plan" data-plan="growth_monthly" style="width:100%; font-size:0.8rem;">
+            Pay Monthly (₦18,000)
+          </button>
+          <button type="button" class="btn btn-primary btn-sm btn-pay-plan" data-plan="growth_annual" style="width:100%; margin-top:0.35rem; font-size:0.8rem;">
+            Pay Yearly (₦180,000)
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-upgrade-plan').classList.remove('active')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FLOATING WHATSAPP SUPPORT BUTTON (SaaS Spec §14) -->
   <a id="legacyos-whatsapp-floating-btn" href="https://wa.me/2348000000000?text=Hello%20LegacyOS%20Support%2C%20I%20need%20assistance%20with%20my%20office%20setup" target="_blank" rel="noopener noreferrer" style="position:fixed; bottom:24px; left:24px; background:#25D366; color:#fff; padding:0.65rem 1.15rem; border-radius:999px; font-weight:700; font-size:0.875rem; display:flex; align-items:center; gap:0.5rem; text-decoration:none; box-shadow:0 8px 24px rgba(37,211,102,0.4); z-index:999; transition:transform 0.2s ease;">
     <i class="fab fa-whatsapp" style="font-size:1.25rem;"></i>
@@ -1333,9 +1391,11 @@
   <!-- JavaScript Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://js.paystack.co/v1/inline.js"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/godspeed-store.js"></script>
   <script src="js/attendance.js"></script>
+  <script src="js/payment-service.js"></script>
   <script src="js/godspeed-app.js"></script>
 </body>
 </html>
