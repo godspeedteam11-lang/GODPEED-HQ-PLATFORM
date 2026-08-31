@@ -909,6 +909,9 @@ class GodspeedStore {
     else if (totalPV >= 1000) eligibleRankFlag = 'senior_manager';
     else if (totalPV >= 500) eligibleRankFlag = 'manager';
 
+    return { totalPV, eligibleRankFlag };
+  }
+
   /* ============================================================================
    * CHAT, COMMUNITY & NOTICE BOARD OPERATIONS (PRD §34)
    * ============================================================================ */
