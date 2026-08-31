@@ -445,7 +445,13 @@ class GodspeedStore {
       );
 
       if (error) {
-        return { success: false, message: error.message };
+        let msg = error.message;
+        if (error.message.toLowerCase().includes('already registered') || error.message.toLowerCase().includes('already exists')) {
+          msg = 'An account with this email address already exists. Please click "Sign In" to access your account.';
+        } else if (error.message.toLowerCase().includes('rate limit')) {
+          msg = 'Too many signup attempts. Please wait a few seconds and try again.';
+        }
+        return { success: false, message: msg };
       }
 
       if (data && data.user) {
@@ -460,12 +466,12 @@ class GodspeedStore {
           return { 
             success: true, 
             requiresConfirmation: true, 
-            message: 'Account created successfully! If email confirmation is enabled on your Supabase project, please check your inbox before logging in.' 
+            message: 'Account created successfully! Please check your email inbox to confirm your email address before logging in (or disable "Confirm email" in Supabase Auth settings).' 
           };
         }
       }
 
-      return { success: false, message: 'Signup failed: No user record returned.' };
+      return { success: false, message: 'Signup failed: No user record returned by Supabase.' };
     } catch (err) {
       console.error('Registration exception:', err);
       return { success: false, message: 'Signup failed: ' + (err.message || err) };

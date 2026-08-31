@@ -480,6 +480,10 @@ BEGIN
         SELECT id INTO v_office_id FROM public.offices WHERE code = 'HQ-AKR';
     END IF;
 
+    IF v_office_id IS NULL THEN
+        SELECT id INTO v_office_id FROM public.offices LIMIT 1;
+    END IF;
+
     IF NEW.raw_user_meta_data->>'sponsor' IS NOT NULL AND NEW.raw_user_meta_data->>'sponsor' <> '' THEN
         SELECT id INTO v_sponsor_uuid FROM public.members 
         WHERE member_code = UPPER(NEW.raw_user_meta_data->>'sponsor') 
@@ -500,7 +504,7 @@ BEGIN
         onboarding_completed
     ) VALUES (
         NEW.id,
-        'GSD-' || UPPER(SUBSTRING(NEW.id::text FROM 1 FOR 6)),
+        'GSD-' || UPPER(SUBSTRING(NEW.id::text FROM 1 FOR 8)),
         COALESCE(NEW.raw_user_meta_data->>'full_name', 'New Member'),
         NEW.email,
         COALESCE(NEW.raw_user_meta_data->>'phone', ''),
@@ -512,6 +516,9 @@ BEGIN
     )
     ON CONFLICT (id) DO NOTHING;
 
+    RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'handle_new_user_signup exception: %', SQLERRM;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
