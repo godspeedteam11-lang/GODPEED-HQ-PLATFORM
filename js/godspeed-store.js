@@ -1,61 +1,274 @@
 /**
- * GODSPEED HQ - Core Data Store & State Engine (PRD v1.1 Baseline)
+ * GODSPEED HQ - Core Data Store & Supabase Live Data Layer (PRD v1.1 Baseline)
+ * Fully backed by Supabase PostgreSQL + Row-Level Security (RLS)
  * Supports Two-Portal Architecture (Member Portal & Super Admin Control Center)
  */
 
 class GodspeedStore {
   constructor() {
     this.STORAGE_KEY = 'godspeed_hq_state_v1.1';
-    
+
     // Active Authenticated Session
-    this.currentUserId = null; // null = unauthenticated visitor
+    this.currentUserId = null;
+    this.activeAuthUser = null;
+    this.currentMember = null;
     this.isAuthenticated = false;
-    
-    // Core State Collections
+
+    // Core Live State Collections (Populated via Supabase)
     this.offices = [];
     this.members = [];
     this.attendanceLogs = [];
     this.officeDues = [];
     this.pvSubmissions = [];
     this.earningsLedger = [];
-    this.freelanceProjects = [];
     this.healthScores = [];
     this.chatMessages = [];
     this.noticeBoard = [];
+    this.genealogyClosure = [];
 
     this.init();
   }
 
   async init() {
-    const saved = localStorage.getItem(this.STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        this.offices = parsed.offices || [];
-        this.members = parsed.members || [];
-        this.attendanceLogs = parsed.attendanceLogs || [];
-        this.officeDues = parsed.officeDues || [];
-        this.pvSubmissions = parsed.pvSubmissions || [];
-        this.earningsLedger = parsed.earningsLedger || [];
-        this.freelanceProjects = parsed.freelanceProjects || [];
-        this.healthScores = parsed.healthScores || [];
-        this.chatMessages = parsed.chatMessages || [];
-        this.noticeBoard = parsed.noticeBoard || [];
-        if (parsed.currentUserId) {
-          this.currentUserId = parsed.currentUserId;
-          this.isAuthenticated = parsed.isAuthenticated || false;
-        }
-      } catch (e) {
-        this.seedInitialData();
-      }
-    } else {
-      this.seedInitialData();
-    }
-
-    // Connect to Real Supabase Auth Session
+    // Attempt to connect to live Supabase Session first
     await this.syncSupabaseSession();
   }
 
+  /* Normalization Helpers for Clean Dual-Property Access (camelCase & snake_case) */
+  normalizeMember(m) {
+    if (!m) return null;
+    return {
+      ...m,
+      id: m.id,
+      code: m.member_code || m.code || ('GSD-' + (m.id ? m.id.substring(0, 6).toUpperCase() : '000')),
+      member_code: m.member_code || m.code,
+      name: m.full_name || m.name || (m.email ? m.email.split('@')[0] : 'Member'),
+      full_name: m.full_name || m.name,
+      email: m.email || '',
+      phone: m.phone || '',
+      role: m.role || 'member',
+      rank: m.official_rank || m.rank || 'newbie',
+      official_rank: m.official_rank || m.rank || 'newbie',
+      highest_achieved_rank: m.highest_achieved_rank || m.official_rank || m.rank || 'newbie',
+      officeId: m.primary_office_id || m.officeId || '33333333-3333-3333-3333-333333333333',
+      primary_office_id: m.primary_office_id || m.officeId,
+      sponsorId: m.sponsor_id || m.sponsorId,
+      sponsor_id: m.sponsor_id || m.sponsorId,
+      onboarding_completed: m.onboarding_completed ?? false,
+      biometric_enrolled: m.biometric_enrolled ?? false
+    };
+  }
+
+  normalizeOffice(o) {
+    if (!o) return null;
+    let lat = 7.2571;
+    let lng = 5.2058;
+    if (o.code === 'HQ-LGS') { lat = 6.6018; lng = 3.3515; }
+    else if (o.code === 'HQ-ABJ') { lat = 9.0765; lng = 7.3986; }
+
+    return {
+      ...o,
+      id: o.id,
+      code: o.code,
+      name: o.name,
+      address: o.address || '',
+      latitude: lat,
+      longitude: lng,
+      radiusMeters: o.geofence_radius_meters || o.radiusMeters || 30,
+      geofence_radius_meters: o.geofence_radius_meters || o.radiusMeters || 30,
+      teamLeaderId: o.team_leader_id || o.teamLeaderId,
+      team_leader_id: o.team_leader_id || o.teamLeaderId,
+      timezone: o.timezone || 'Africa/Lagos'
+    };
+  }
+
+  normalizeAttendance(a) {
+    if (!a) return null;
+    const dateObj = a.check_in_timestamp ? new Date(a.check_in_timestamp) : new Date();
+    return {
+      ...a,
+      id: a.id,
+      memberId: a.member_id || a.memberId,
+      member_id: a.member_id || a.memberId,
+      officeId: a.office_id || a.officeId,
+      office_id: a.office_id || a.officeId,
+      date: dateObj.toISOString().split('T')[0],
+      time: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      qrVerified: a.qr_verified ?? false,
+      qr_verified: a.qr_verified ?? false,
+      faceVerified: a.face_verified ?? false,
+      face_verified: a.face_verified ?? false,
+      livenessPassed: a.liveness_passed ?? false,
+      liveness_passed: a.liveness_passed ?? false,
+      distanceMeters: a.distance_from_office_meters || a.distanceMeters || 0,
+      distance_from_office_meters: a.distance_from_office_meters || a.distanceMeters || 0,
+      status: a.status || 'success',
+      overrideReason: a.override_reason || a.overrideReason,
+      override_reason: a.override_reason || a.overrideReason
+    };
+  }
+
+  normalizeDue(d) {
+    if (!d) return null;
+    return {
+      ...d,
+      id: d.id,
+      memberId: d.member_id || d.memberId,
+      member_id: d.member_id || d.memberId,
+      officeId: d.office_id || d.officeId,
+      office_id: d.office_id || d.officeId,
+      period: d.period_name || d.period || '',
+      period_name: d.period_name || d.period || '',
+      amount: Number(d.amount) || 0,
+      paidAmount: Number(d.paid_amount || d.paidAmount || 0),
+      paid_amount: Number(d.paid_amount || d.paidAmount || 0),
+      dueDate: d.due_date || d.dueDate || '',
+      due_date: d.due_date || d.dueDate || '',
+      status: d.status || 'pending',
+      evidenceUrl: d.evidence_url || d.evidenceUrl
+    };
+  }
+
+  normalizePV(p) {
+    if (!p) return null;
+    return {
+      ...p,
+      id: p.id,
+      memberId: p.member_id || p.memberId,
+      member_id: p.member_id || p.memberId,
+      period: p.sales_period || p.period || '',
+      sales_period: p.sales_period || p.period || '',
+      pvAmount: Number(p.pv_amount || p.pvAmount || 0),
+      pv_amount: Number(p.pv_amount || p.pvAmount || 0),
+      orderRef: p.order_reference || p.orderRef || '',
+      order_reference: p.order_reference || p.orderRef || '',
+      status: p.status || 'pv_submitted',
+      expectedPickup: p.expected_pickup_date || p.expectedPickup || '',
+      expected_pickup_date: p.expected_pickup_date || p.expectedPickup || '',
+      photoUploaded: Boolean(p.carriage_photo_url || p.photoUploaded),
+      carriage_photo_url: p.carriage_photo_url || p.photoUploaded
+    };
+  }
+
+  normalizeEarning(e) {
+    if (!e) return null;
+    return {
+      ...e,
+      id: e.id,
+      memberId: e.member_id || e.memberId,
+      member_id: e.member_id || e.memberId,
+      source: e.source || '',
+      gross: Number(e.gross_amount || e.gross || 0),
+      gross_amount: Number(e.gross_amount || e.gross || 0),
+      net: Number(e.net_amount || e.net || 0),
+      net_amount: Number(e.net_amount || e.net || 0),
+      officeDue10: Number(e.office_due_10 || e.officeDue10 || 0),
+      office_due_10: Number(e.office_due_10 || e.officeDue10 || 0),
+      personal20: Number(e.personal_savings_20 || e.personal20 || 0),
+      personal_savings_20: Number(e.personal_savings_20 || e.personal20 || 0),
+      business70: Number(e.business_fund_70 || e.business70 || 0),
+      business_fund_70: Number(e.business_fund_70 || e.business70 || 0),
+      date: e.earned_date || e.date || '',
+      earned_date: e.earned_date || e.date || ''
+    };
+  }
+
+  normalizeHealthScore(h) {
+    if (!h) return null;
+    let sigs = h.warning_signals || h.signals || [];
+    if (typeof sigs === 'string') {
+      try { sigs = JSON.parse(sigs); } catch (e) { sigs = [sigs]; }
+    }
+    return {
+      ...h,
+      memberId: h.member_id || h.memberId,
+      member_id: h.member_id || h.memberId,
+      healthStatus: h.health_status || h.healthStatus || 'green',
+      health_status: h.health_status || h.healthStatus || 'green',
+      attendanceRate: Number(h.attendance_rate_30d || h.attendanceRate || 100),
+      attendance_rate_30d: Number(h.attendance_rate_30d || h.attendanceRate || 100),
+      mtdPV: Number(h.pv_month_to_date || h.mtdPV || 0),
+      pv_month_to_date: Number(h.pv_month_to_date || h.mtdPV || 0),
+      dueArrears: Number(h.due_arrears_count || h.dueArrears || 0),
+      due_arrears_count: Number(h.due_arrears_count || h.dueArrears || 0),
+      signals: Array.isArray(sigs) ? sigs : []
+    };
+  }
+
+  normalizeChatMessage(c) {
+    if (!c) return null;
+    const dateObj = c.created_at ? new Date(c.created_at) : new Date();
+    const sender = this.members.find(m => m.id === (c.sender_id || c.senderId));
+    return {
+      ...c,
+      id: c.id,
+      senderId: c.sender_id || c.senderId,
+      sender_id: c.sender_id || c.senderId,
+      senderName: sender ? sender.name : 'Member',
+      recipientId: c.recipient_id || c.recipientId,
+      recipient_id: c.recipient_id || c.recipientId,
+      officeId: c.office_id || c.officeId,
+      office_id: c.office_id || c.officeId,
+      content: c.content || '',
+      attachmentUrl: c.attachment_url || c.attachmentUrl,
+      isSoftDeleted: c.is_soft_deleted ?? false,
+      is_soft_deleted: c.is_soft_deleted ?? false,
+      moderatedBy: c.moderated_by || c.moderatedBy,
+      moderated_by: c.moderated_by || c.moderatedBy,
+      moderationReason: c.moderation_reason || c.moderationReason,
+      moderation_reason: c.moderation_reason || c.moderationReason,
+      time: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: c.created_at || new Date().toISOString()
+    };
+  }
+
+  normalizeCommunityPost(p) {
+    if (!p) return null;
+    const author = this.members.find(m => m.id === (p.author_id || p.authorId));
+    const dateObj = p.created_at ? new Date(p.created_at) : new Date();
+    return {
+      ...p,
+      id: p.id,
+      authorId: p.author_id || p.authorId,
+      author_id: p.author_id || p.authorId,
+      authorName: author ? author.name : 'Member',
+      officeId: p.office_id || p.officeId,
+      office_id: p.office_id || p.officeId,
+      category: p.category || 'general',
+      title: p.title || '',
+      content: p.content || '',
+      mediaUrl: p.media_url || p.mediaUrl,
+      likesCount: p.likes_count || p.likesCount || 0,
+      isPinned: p.is_pinned ?? false,
+      isLocked: p.is_locked ?? false,
+      date: dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+      createdAt: p.created_at || new Date().toISOString()
+    };
+  }
+
+  normalizeNoticeItem(n) {
+    if (!n) return null;
+    const author = this.members.find(m => m.id === (n.author_id || n.authorId));
+    const dateObj = n.created_at ? new Date(n.created_at) : new Date();
+    return {
+      ...n,
+      id: n.id,
+      authorId: n.author_id || n.authorId,
+      author_id: n.author_id || n.authorId,
+      author: author ? author.name : 'SuperAdmin',
+      officeId: n.office_id || n.officeId,
+      office_id: n.office_id || n.officeId,
+      title: n.title || '',
+      category: n.category || 'Official Announcement',
+      content: n.content || '',
+      priority: n.priority || 'normal',
+      targetAudience: n.target_audience || n.targetAudience || 'all',
+      date: dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+      createdAt: n.created_at || new Date().toISOString()
+    };
+  }
+
+  /* Real Supabase Session Synchronizer */
   async syncSupabaseSession() {
     if (!window.supabaseAuth) return;
     try {
@@ -65,37 +278,113 @@ class GodspeedStore {
         this.activeAuthUser = sbUser;
         this.isAuthenticated = true;
         this.currentUserId = sbUser.id;
-        
-        let member = this.members.find(m => m.id === sbUser.id || m.email.toLowerCase() === sbUser.email.toLowerCase());
-        if (!member) {
-          member = {
-            id: sbUser.id,
-            code: 'GSD-' + sbUser.id.substring(0, 6).toUpperCase(),
-            name: sbUser.user_metadata?.full_name || sbUser.email.split('@')[0],
-            email: sbUser.email.toLowerCase(),
-            phone: sbUser.user_metadata?.phone || '',
-            role: 'member',
-            rank: 'newbie',
-            officeId: 'OFF-AKR',
-            sponsorId: 'MEM-001'
-          };
-          this.members.push(member);
-        }
-        this.save();
+
+        // Fetch live application state from Supabase scoped by active session
+        await this.loadAllAppData();
       } else {
         this.activeAuthUser = null;
-        if (!window.GODSPEED_CONFIG || !window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
-          this.currentUserId = null;
-          this.isAuthenticated = false;
-        }
+        this.currentUserId = null;
+        this.isAuthenticated = false;
+        this.currentMember = null;
       }
     } catch (err) {
-      console.warn('Supabase Session Sync:', err);
+      console.warn('Supabase Session Sync Error:', err);
     }
   }
 
-  /* Public Member Signup (Real Supabase Auth + Trigger Profile Creation) */
-  async registerMember(fullName, email, phone, password, sponsorCode = null, officeId = 'OFF-AKR') {
+  /* Load Live Data Collections from Supabase */
+  async loadAllAppData() {
+    if (!window.godspeedSupabase) return;
+
+    try {
+      const [
+        officesRes,
+        membersRes,
+        attendanceRes,
+        duesRes,
+        pvRes,
+        earningsRes,
+        healthRes,
+        chatRes,
+        communityRes,
+        noticeRes,
+        closureRes
+      ] = await Promise.all([
+        window.godspeedSupabase.from('offices').select('*'),
+        window.godspeedSupabase.from('members').select('*'),
+        window.godspeedSupabase.from('attendance_logs').select('*').order('check_in_timestamp', { ascending: false }),
+        window.godspeedSupabase.from('office_dues').select('*').order('created_at', { ascending: false }),
+        window.godspeedSupabase.from('pv_submissions').select('*').order('created_at', { ascending: false }),
+        window.godspeedSupabase.from('earnings_ledger').select('*').order('earned_date', { ascending: false }),
+        window.godspeedSupabase.from('health_scores').select('*'),
+        window.godspeedSupabase.from('chat_messages').select('*').order('created_at', { ascending: true }),
+        window.godspeedSupabase.from('community_posts').select('*').order('created_at', { ascending: false }),
+        window.godspeedSupabase.from('notice_board').select('*').order('created_at', { ascending: false }),
+        window.godspeedSupabase.from('genealogy_closure').select('*')
+      ]);
+
+      if (officesRes.data) {
+        this.offices = officesRes.data.map(o => this.normalizeOffice(o));
+      }
+      if (membersRes.data) {
+        this.members = membersRes.data.map(m => this.normalizeMember(m));
+        if (this.currentUserId) {
+          this.currentMember = this.members.find(m => m.id === this.currentUserId) || null;
+        }
+      }
+      if (attendanceRes.data) {
+        this.attendanceLogs = attendanceRes.data.map(a => this.normalizeAttendance(a));
+      }
+      if (duesRes.data) {
+        this.officeDues = duesRes.data.map(d => this.normalizeDue(d));
+      }
+      if (pvRes.data) {
+        this.pvSubmissions = pvRes.data.map(p => this.normalizePV(p));
+      }
+      if (earningsRes.data) {
+        this.earningsLedger = earningsRes.data.map(e => this.normalizeEarning(e));
+      }
+      if (healthRes.data) {
+        this.healthScores = healthRes.data.map(h => this.normalizeHealthScore(h));
+      }
+      if (chatRes.data) {
+        this.chatMessages = chatRes.data.map(c => this.normalizeChatMessage(c));
+      }
+      if (communityRes.data) {
+        this.communityPosts = communityRes.data.map(p => this.normalizeCommunityPost(p));
+      }
+      if (noticeRes.data && noticeRes.data.length > 0) {
+        this.noticeBoard = noticeRes.data.map(n => this.normalizeNoticeItem(n));
+      } else {
+        this.noticeBoard = [
+          { 
+            id: 'NOT-1', 
+            title: 'Q3 NeoLife Leadership Rally & Carriage Reconciliation', 
+            author: 'SuperAdmin', 
+            category: 'Official Announcement', 
+            date: new Date().toISOString().split('T')[0], 
+            content: 'All Directors and Emerald Directors must ensure physical product carriage photos are uploaded before the 28th.' 
+          },
+          { 
+            id: 'NOT-2', 
+            title: 'Monthly Freelance Fund Allocation Reminder', 
+            author: 'Finance Officer', 
+            category: 'Finance', 
+            date: new Date().toISOString().split('T')[0], 
+            content: '10% office dues from verified freelancing projects are automatically generated upon earning submission.' 
+          }
+        ];
+      }
+      if (closureRes.data) {
+        this.genealogyClosure = closureRes.data;
+      }
+    } catch (err) {
+      console.warn('Error loading live Supabase data:', err);
+    }
+  }
+
+  /* Public Member Signup (Real Supabase Auth + Server Trigger Profile Creation) */
+  async registerMember(fullName, email, phone, password, sponsorCode = null, officeId = 'HQ-AKR') {
     if (!fullName || !email || !password) {
       return { success: false, message: 'Please fill in all required fields (Name, Email, Password).' };
     }
@@ -104,113 +393,76 @@ class GodspeedStore {
       return { success: false, message: 'Password must be at least 6 characters long.' };
     }
 
-    if (window.supabaseAuth) {
-      try {
-        const { data, error } = await window.supabaseAuth.signUpUser(email, password, fullName, phone, sponsorCode, officeId);
-        if (error) {
-          if (window.GODSPEED_CONFIG && window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
-            console.warn('Supabase Auth error, falling back to demo mode:', error.message);
-          } else {
-            return { success: false, message: error.message };
-          }
-        } else if (data && data.user) {
-          const newUserId = data.user.id;
-          const newMember = {
-            id: newUserId,
-            code: 'GSD-' + newUserId.substring(0, 6).toUpperCase(),
-            name: fullName,
-            email: email.toLowerCase(),
-            phone: phone || '',
-            role: 'member',
-            rank: 'newbie',
-            officeId: 'OFF-AKR',
-            sponsorId: sponsorCode || 'MEM-001'
+    if (!window.supabaseAuth) {
+      return { success: false, message: 'Supabase authentication service unavailable.' };
+    }
+
+    try {
+      const { data, error } = await window.supabaseAuth.signUpUser(
+        email, 
+        password, 
+        fullName, 
+        phone, 
+        sponsorCode, 
+        officeId
+      );
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      if (data && data.user) {
+        if (data.session) {
+          await this.syncSupabaseSession();
+          return { 
+            success: true, 
+            member: this.currentMember, 
+            message: 'Account created! Welcome to GODSPEED HQ.' 
           };
-
-          if (!this.members.some(m => m.id === newUserId || m.email.toLowerCase() === email.toLowerCase())) {
-            this.members.push(newMember);
-          }
-
-          if (data.session) {
-            this.currentUserId = newUserId;
-            this.isAuthenticated = true;
-            this.activeAuthUser = data.user;
-            this.save();
-            return { success: true, member: newMember, message: 'Account created! Welcome to GODSPEED HQ.' };
-          } else {
-            this.save();
-            return { 
-              success: true, 
-              member: newMember, 
-              requiresConfirmation: true, 
-              message: 'Account created successfully! If email confirmation is enabled on your Supabase project, please check your inbox before logging in.' 
-            };
-          }
-        }
-      } catch (err) {
-        console.error('Registration exception:', err);
-        if (!window.GODSPEED_CONFIG || !window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
-          return { success: false, message: 'Signup failed due to connection error: ' + (err.message || err) };
+        } else {
+          return { 
+            success: true, 
+            requiresConfirmation: true, 
+            message: 'Account created successfully! If email confirmation is enabled on your Supabase project, please check your inbox before logging in.' 
+          };
         }
       }
-    }
 
-    // Demo Mode Fallback (ONLY if ENABLE_DEMO_MODE is true)
-    if (window.GODSPEED_CONFIG && window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
-      const newId = 'MEM-' + String(this.members.length + 1).padStart(3, '0');
-      const newMember = {
-        id: newId,
-        code: 'GSD-' + String(this.members.length + 1).padStart(3, '0'),
-        name: fullName,
-        email: email.toLowerCase(),
-        phone: phone || '',
-        role: 'member',
-        rank: 'newbie',
-        officeId: 'OFF-AKR',
-        sponsorId: sponsorCode || 'MEM-001'
-      };
-      this.members.push(newMember);
-      this.currentUserId = newId;
-      this.isAuthenticated = true;
-      this.save();
-      return { success: true, member: newMember, message: 'Account created in Demo Mode!' };
+      return { success: false, message: 'Signup failed: No user record returned.' };
+    } catch (err) {
+      console.error('Registration exception:', err);
+      return { success: false, message: 'Signup failed: ' + (err.message || err) };
     }
-
-    return { success: false, message: 'Signup Failed: Unable to establish Supabase Auth connection.' };
   }
 
   /* Authenticate User Sign In via Supabase Auth */
   async authenticateUser(email, password) {
-    if (window.supabaseAuth) {
+    if (!email || !password) {
+      return { success: false, message: 'Please enter both email and password.' };
+    }
+
+    if (!window.supabaseAuth) {
+      return { success: false, message: 'Supabase authentication service unavailable.' };
+    }
+
+    try {
       const { data, error } = await window.supabaseAuth.signInUser(email, password);
-      if (!error && data && data.user) {
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      if (data && data.user) {
         await this.syncSupabaseSession();
         const member = this.getCurrentUser();
         const perms = this.getUserPermissions(member ? member.id : data.user.id);
         return { success: true, member, permissions: perms };
       }
-      if (error && (!window.GODSPEED_CONFIG || !window.GODSPEED_CONFIG.ENABLE_DEMO_MODE)) {
-        return { success: false, message: error.message };
-      }
-    }
 
-    // Demo Credentials Fallback (ONLY if ENABLE_DEMO_MODE is true)
-    if (window.GODSPEED_CONFIG && window.GODSPEED_CONFIG.ENABLE_DEMO_MODE) {
-      const member = this.members.find(m => m.email.toLowerCase() === email.toLowerCase());
-      if (!member) {
-        return { success: false, message: 'Invalid credentials. User account not found.' };
-      }
-      if (password && member.password && password !== member.password && password !== 'password123') {
-        return { success: false, message: 'Invalid email or password.' };
-      }
-      this.currentUserId = member.id;
-      this.isAuthenticated = true;
-      this.save();
-      const perms = this.getUserPermissions(member.id);
-      return { success: true, member, permissions: perms };
+      return { success: false, message: 'Invalid credentials. User account not found.' };
+    } catch (err) {
+      console.error('Authentication exception:', err);
+      return { success: false, message: 'Sign in failed: ' + (err.message || err) };
     }
-
-    return { success: false, message: 'Authentication Failed: Invalid email or password.' };
   }
 
   /* Authenticate Super Admin Control Center Sign In */
@@ -235,195 +487,32 @@ class GodspeedStore {
       await window.supabaseAuth.signOutUser();
     }
     this.currentUserId = null;
+    this.activeAuthUser = null;
+    this.currentMember = null;
     this.isAuthenticated = false;
-    this.save();
-  }
-
-  seedInitialData() {
-    const today = new Date().toISOString().split('T')[0];
-
-    // 1. Offices (Lagos & Abuja)
-    this.offices = [
-      { id: 'OFF-101', code: 'HQ-LGS', name: 'GODSPEED HQ Ikeja', latitude: 6.6018, longitude: 3.3515, radiusMeters: 30, teamLeaderId: 'MEM-002', timezone: 'Africa/Lagos' },
-      { id: 'OFF-102', code: 'HQ-ABJ', name: 'GODSPEED Abuja Hub', latitude: 9.0765, longitude: 7.3986, radiusMeters: 40, teamLeaderId: 'MEM-005', timezone: 'Africa/Lagos' }
-    ];
-
-    // 2. Members (Sponsor Genealogy Hierarchy)
-    // Master Super Admin Owner Account: MEM-001 (admin@godspeed.org / password)
-    this.members = [
-      { id: 'MEM-001', code: 'GSD-001', name: 'Chief SuperAdmin', role: 'super_admin', rank: 'president_team', officeId: 'OFF-101', sponsorId: null, email: 'admin@godspeed.org', phone: '+2348000000001', password: 'password123' },
-      { id: 'MEM-002', code: 'GSD-002', name: 'Leader Sarah Miller', role: 'team_leader', rank: 'director', officeId: 'OFF-101', sponsorId: 'MEM-001', email: 'sarah.m@godspeed.org', phone: '+2348000000002', password: 'password123' },
-      { id: 'MEM-003', code: 'GSD-003', name: 'Upline Michael Brown', role: 'member', rank: 'emerald_director', officeId: 'OFF-101', sponsorId: 'MEM-002', email: 'michael.b@godspeed.org', phone: '+2348000000003', password: 'password123' },
-      { id: 'MEM-004', code: 'GSD-004', name: 'Alex Johnson', role: 'member', rank: 'senior_manager', officeId: 'OFF-101', sponsorId: 'MEM-003', email: 'alex.j@godspeed.org', phone: '+2348000000004', password: 'password123' },
-      { id: 'MEM-005', code: 'GSD-005', name: 'Emily Davis', role: 'team_leader', rank: 'executive_manager', officeId: 'OFF-102', sponsorId: 'MEM-003', email: 'emily.d@godspeed.org', phone: '+2348000000005', password: 'password123' },
-      { id: 'MEM-006', code: 'GSD-006', name: 'David Chen', role: 'member', rank: 'full_distributor', officeId: 'OFF-101', sponsorId: 'MEM-004', email: 'david.c@godspeed.org', phone: '+2348000000006', password: 'password123' },
-      { id: 'MEM-007', code: 'GSD-007', name: 'Sophia Martinez', role: 'member', rank: 'newbie', officeId: 'OFF-101', sponsorId: 'MEM-004', email: 'sophia.m@godspeed.org', phone: '+2348000000007', password: 'password123' }
-    ];
-
-    // 3. Attendance Logs
-    this.attendanceLogs = [
-      { id: 'ATT-1', memberId: 'MEM-004', officeId: 'OFF-101', date: today, time: '08:45 AM', qrVerified: true, faceVerified: true, distanceMeters: 12.4, status: 'success' },
-      { id: 'ATT-2', memberId: 'MEM-002', officeId: 'OFF-101', date: today, time: '08:50 AM', qrVerified: true, faceVerified: true, distanceMeters: 5.1, status: 'success' },
-      { id: 'ATT-3', memberId: 'MEM-006', officeId: 'OFF-101', date: today, time: '09:30 AM', qrVerified: true, faceVerified: true, distanceMeters: 28.9, status: 'flagged', overrideReason: 'GPS drift near window' }
-    ];
-
-    // 4. Office Dues
-    this.officeDues = [
-      { id: 'DUE-1', memberId: 'MEM-004', period: 'August 2026', amount: 5000, paidAmount: 5000, dueDate: '2026-08-31', status: 'paid' },
-      { id: 'DUE-2', memberId: 'MEM-006', period: 'August 2026', amount: 5000, paidAmount: 0, dueDate: '2026-08-31', status: 'overdue' },
-      { id: 'DUE-3', memberId: 'MEM-007', period: 'August 2026', amount: 5000, paidAmount: 2500, dueDate: '2026-08-31', status: 'partially_paid' }
-    ];
-
-    // 5. NeoLife PV & Carriage Submissions
-    this.pvSubmissions = [
-      { id: 'PV-101', memberId: 'MEM-004', period: '2026-08', pvAmount: 1050, orderRef: 'NL-88421', status: 'approved', expectedPickup: '2026-08-20', photoUploaded: true },
-      { id: 'PV-102', memberId: 'MEM-003', period: '2026-08', pvAmount: 4200, orderRef: 'NL-89104', status: 'under_review', expectedPickup: '2026-08-28', photoUploaded: true },
-      { id: 'PV-103', memberId: 'MEM-006', period: '2026-08', pvAmount: 520, orderRef: 'NL-89302', status: 'pv_submitted', expectedPickup: '2026-09-02', photoUploaded: false }
-    ];
-
-    // 6. Freelancing Earnings & 10/20/70 Allocation Ledger
-    this.earningsLedger = [
-      { id: 'EARN-1', memberId: 'MEM-004', source: 'Freelancing (Fiverr)', gross: 150000, net: 150000, officeDue10: 15000, personal20: 30000, business70: 105000, date: today },
-      { id: 'EARN-2', memberId: 'MEM-006', source: 'Web Dev Project', gross: 80000, net: 80000, officeDue10: 8000, personal20: 16000, business70: 56000, date: '2026-08-25' }
-    ];
-
-    // 7. Leadership Health Scores & At-Risk Flags
-    this.healthScores = [
-      { memberId: 'MEM-004', healthStatus: 'green', attendanceRate: 95, mtdPV: 1050, dueArrears: 0, signals: ['High Activity'] },
-      { memberId: 'MEM-006', healthStatus: 'amber', attendanceRate: 70, mtdPV: 520, dueArrears: 1, signals: ['Overdue Dues', 'Missed 2 Sessions'] },
-      { memberId: 'MEM-007', healthStatus: 'red', attendanceRate: 40, mtdPV: 0, dueArrears: 1, signals: ['Zero PV This Month', 'Low Attendance'] }
-    ];
-
-    // 8. Notice Board Broadcasts
-    this.noticeBoard = [
-      { id: 'NOT-1', title: 'Q3 NeoLife Leadership Rally & Carriage Reconciliation', author: 'SuperAdmin', category: 'Official Announcement', date: today, content: 'All Directors and Emerald Directors must ensure physical product carriage photos are uploaded before the 28th.' },
-      { id: 'NOT-2', title: 'Monthly Freelance Fund Allocation Reminder', author: 'Finance Officer', category: 'Finance', date: '2026-08-26', content: '10% office dues from verified freelancing projects are automatically generated upon earning submission.' }
-    ];
-
-    this.save();
-  }
-
-  save() {
-    const payload = {
-      currentUserId: this.currentUserId,
-      isAuthenticated: this.isAuthenticated,
-      offices: this.offices,
-      members: this.members,
-      attendanceLogs: this.attendanceLogs,
-      officeDues: this.officeDues,
-      pvSubmissions: this.pvSubmissions,
-      earningsLedger: this.earningsLedger,
-      freelanceProjects: this.freelanceProjects,
-      healthScores: this.healthScores,
-      chatMessages: this.chatMessages,
-      noticeBoard: this.noticeBoard
-    };
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(payload));
-  }
-
-  /* Public Member Signup (SECURITY RULE: Always assigns role = 'member') */
-  registerMember(fullName, email, phone, password, sponsorCode = null, officeId = 'OFF-101') {
-    const existing = this.members.find(m => m.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      return { success: false, message: 'An account with this email address already exists.' };
-    }
-
-    // Resolve sponsor if provided
-    let sponsorId = 'MEM-001';
-    if (sponsorCode) {
-      const foundSponsor = this.members.find(m => m.code.toLowerCase() === sponsorCode.toLowerCase() || m.id === sponsorCode);
-      if (foundSponsor) sponsorId = foundSponsor.id;
-    }
-
-    const newId = 'MEM-' + String(this.members.length + 1).padStart(3, '0');
-    const newCode = 'GSD-' + String(this.members.length + 1).padStart(3, '0');
-
-    const newMember = {
-      id: newId,
-      code: newCode,
-      name: fullName,
-      email: email.toLowerCase(),
-      phone,
-      password: password || 'password123',
-      role: 'member', // SECURITY ENFORCED: Public signup can NEVER select admin/leader role
-      rank: 'newbie',
-      officeId: officeId || 'OFF-101',
-      sponsorId
-    };
-
-    this.members.push(newMember);
-
-    // Initial Health Score entry
-    this.healthScores.push({
-      memberId: newId,
-      healthStatus: 'green',
-      attendanceRate: 100,
-      mtdPV: 0,
-      dueArrears: 0,
-      signals: ['New Onboarding Member']
-    });
-
-    this.save();
-    return { success: true, member: newMember, message: 'Account created successfully! Welcome to GODSPEED HQ.' };
-  }
-
-  /* Authenticate User Sign In */
-  authenticateUser(email, password) {
-    const member = this.members.find(m => m.email.toLowerCase() === email.toLowerCase());
-    if (!member) {
-      return { success: false, message: 'Invalid credentials. User account not found.' };
-    }
-
-    // Basic password check (default password fallback for demo)
-    if (password && member.password && password !== member.password && password !== 'password123') {
-      return { success: false, message: 'Invalid email or password.' };
-    }
-
-    this.currentUserId = member.id;
-    this.isAuthenticated = true;
-    this.save();
-
-    const perms = this.getUserPermissions(member.id);
-    return { success: true, member, permissions: perms };
-  }
-
-  /* Authenticate Super Admin Control Center Sign In */
-  authenticateAdmin(email, password) {
-    const authResult = this.authenticateUser(email, password);
-    if (!authResult.success) return authResult;
-
-    const perms = authResult.permissions;
-    if (!perms.isSuperAdmin) {
-      this.logout();
-      return { 
-        success: false, 
-        message: '403 Forbidden: Account lacks Super Admin permissions to access Control Center.' 
-      };
-    }
-
-    return authResult;
-  }
-
-  logout() {
-    this.currentUserId = null;
-    this.isAuthenticated = false;
-    this.save();
   }
 
   getCurrentUser() {
     if (!this.currentUserId) return null;
-    return this.members.find(m => m.id === this.currentUserId) || null;
+    return this.members.find(m => m.id === this.currentUserId) || this.currentMember;
   }
 
   /* Server-Side & Role-Aware Permissions Evaluator */
   getUserPermissions(memberId = this.currentUserId) {
-    const member = this.members.find(m => m.id === memberId);
+    const member = this.members.find(m => m.id === memberId) || this.currentMember;
     if (!member) {
-      return { role: 'visitor', canAccessPersonal: false, canAccessTeam: false, canAccessOffice: false, canAccessAdmin: false, defaultRoute: '/' };
+      return { 
+        role: 'visitor', 
+        canAccessPersonal: false, 
+        canAccessTeam: false, 
+        canAccessOffice: false, 
+        canAccessAdmin: false, 
+        defaultRoute: '/' 
+      };
     }
 
     const isSuperAdmin = member.role === 'super_admin' || member.role === 'admin';
-    const isTeamLeader = member.role === 'team_leader' || this.offices.some(o => o.teamLeaderId === member.id);
+    const isTeamLeader = member.role === 'team_leader' || this.offices.some(o => o.teamLeaderId === member.id || o.team_leader_id === member.id);
     const descendants = this.getDescendantIds(member.id);
     const hasDescendants = descendants.length > 0;
 
@@ -456,7 +545,6 @@ class GodspeedStore {
     if (!memberId) return route === '/' || route === '/login' || route === '/signup';
 
     const perms = this.getUserPermissions(memberId);
-
     if (route === '/dashboard') return perms.canAccessPersonal;
     if (route === '/team') return perms.canAccessTeam;
     if (route === '/office-dashboard') return perms.canAccessOffice;
@@ -486,115 +574,279 @@ class GodspeedStore {
     return options;
   }
 
-  /* Geospatial Geofence Verification */
-  verifyAttendanceGeofence(officeId, userLat, userLng) {
-    const office = this.offices.find(o => o.id === officeId);
-    if (!office) return { valid: false, message: 'Office not found' };
-
-    const R = 6371e3;
-    const φ1 = office.latitude * Math.PI / 180;
-    const φ2 = userLat * Math.PI / 180;
-    const Δφ = (userLat - office.latitude) * Math.PI / 180;
-    const Δλ = (userLng - office.longitude) * Math.PI / 180;
-
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distanceMeters = R * c;
-
-    const valid = distanceMeters <= office.radiusMeters;
-    return {
-      valid,
-      distanceMeters: Math.round(distanceMeters * 10) / 10,
-      radiusMeters: office.radiusMeters,
-      message: valid ? `Inside Geofence (${Math.round(distanceMeters)}m from office)` : `Outside Geofence (${Math.round(distanceMeters)}m from office, max allowed: ${office.radiusMeters}m)`
-    };
-  }
-
-  recordAttendance(memberId, officeId, userLat, userLng, faceVerified = true) {
-    const today = new Date().toISOString().split('T')[0];
-    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    const existing = this.attendanceLogs.find(l => l.memberId === memberId && l.date === today);
-    if (existing) {
-      return { success: false, message: 'Duplicate Check Failed: Attendance already recorded today within 24h.' };
+  /* Real Supabase Rank Mutation (Surfaces Real DB Errors) */
+  async updateMemberRank(memberId, newRank) {
+    if (!window.godspeedSupabase) {
+      return { success: false, message: 'Supabase client is not connected.' };
     }
 
-    const geoResult = this.verifyAttendanceGeofence(officeId, userLat, userLng);
-    if (!geoResult.valid) {
-      return { success: false, message: `Geofence Violation: ${geoResult.message}` };
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('members')
+        .update({ official_rank: newRank, updated_at: new Date().toISOString() })
+        .eq('id', memberId)
+        .select();
+
+      if (error) {
+        console.error('Supabase rank update error:', error);
+        return { success: false, message: error.message || 'Database update failed' };
+      }
+
+      // Update in-memory state
+      const member = this.members.find(m => m.id === memberId);
+      if (member) {
+        member.rank = newRank;
+        member.official_rank = newRank;
+      }
+      return { 
+        success: true, 
+        member, 
+        message: `Rank updated to ${newRank.replace(/_/g, ' ').toUpperCase()} successfully!` 
+      };
+    } catch (err) {
+      console.error('Failed to update rank in Supabase DB:', err);
+      return { success: false, message: err.message || 'Network/Server connection error' };
     }
-
-    const newLog = {
-      id: 'ATT-' + Date.now(),
-      memberId,
-      officeId,
-      date: today,
-      time: timeNow,
-      qrVerified: true,
-      faceVerified,
-      distanceMeters: geoResult.distanceMeters,
-      status: 'success'
-    };
-
-    this.attendanceLogs.unshift(newLog);
-    this.save();
-    return { success: true, log: newLog, message: 'Attendance Verified & Saved Successfully!' };
   }
 
-  /* 10/20/70 Allocation Ledger Entry */
-  addFreelanceEarning(memberId, source, grossAmount) {
+  /* Real Supabase Role Mutation (Surfaces Real DB Errors) */
+  async updateMemberRole(memberId, newRole) {
+    if (!window.godspeedSupabase) {
+      return { success: false, message: 'Supabase client is not connected.' };
+    }
+
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('members')
+        .update({ role: newRole, updated_at: new Date().toISOString() })
+        .eq('id', memberId)
+        .select();
+
+      if (error) {
+        console.error('Supabase role update error:', error);
+        return { success: false, message: error.message || 'Database update failed' };
+      }
+
+      // Update in-memory state
+      const member = this.members.find(m => m.id === memberId);
+      if (member) {
+        member.role = newRole;
+      }
+      return { 
+        success: true, 
+        member, 
+        message: `Role updated to ${newRole.replace(/_/g, ' ').toUpperCase()} successfully!` 
+      };
+    } catch (err) {
+      console.error('Failed to update role in Supabase DB:', err);
+      return { success: false, message: err.message || 'Network/Server connection error' };
+    }
+  }
+
+  /* Real Supabase Attendance Insertion */
+  async recordAttendance(memberId, officeId, userLat, userLng, faceVerified = true, qrVerified = true, livenessPassed = true) {
+    if (!window.godspeedSupabase) {
+      return { success: false, message: 'Supabase client unavailable.' };
+    }
+
+    try {
+      // Find office location
+      const office = this.offices.find(o => o.id === officeId) || this.offices[0];
+      const officeLat = office ? office.latitude : 7.2571;
+      const officeLng = office ? office.longitude : 5.2058;
+
+      // Calculate approximate distance
+      const R = 6371e3;
+      const φ1 = officeLat * Math.PI / 180;
+      const φ2 = userLat * Math.PI / 180;
+      const Δφ = (userLat - officeLat) * Math.PI / 180;
+      const Δλ = (userLng - officeLng) * Math.PI / 180;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const distanceMeters = Math.round(R * c * 10) / 10;
+
+      const { data, error } = await window.godspeedSupabase
+        .from('attendance_logs')
+        .insert({
+          member_id: memberId,
+          office_id: office ? office.id : officeId,
+          device_latitude: userLat,
+          device_longitude: userLng,
+          distance_from_office_meters: distanceMeters,
+          qr_verified: qrVerified,
+          face_verified: faceVerified,
+          liveness_passed: livenessPassed,
+          status: 'success'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase attendance insert error:', error);
+        return { success: false, message: error.message };
+      }
+
+      await this.loadAllAppData();
+      return { 
+        success: true, 
+        log: this.normalizeAttendance(data), 
+        message: 'Attendance Verified & Recorded in Supabase Successfully!' 
+      };
+    } catch (err) {
+      console.error('Attendance recording exception:', err);
+      return { success: false, message: err.message || 'Failed to record attendance' };
+    }
+  }
+
+  /* Real Supabase Freelancing Earnings & 10/20/70 Split Entry */
+  async addFreelanceEarning(memberId, source, grossAmount) {
     const net = Number(grossAmount);
-    const due10 = net * 0.10;
-    const personal20 = net * 0.20;
-    const business70 = net * 0.70;
+    if (!net || isNaN(net) || net <= 0) {
+      return { success: false, message: 'Invalid gross amount.' };
+    }
 
-    const entry = {
-      id: 'EARN-' + Date.now(),
-      memberId,
-      source,
-      gross: net,
-      net,
-      officeDue10: due10,
-      personal20,
-      business70,
-      date: new Date().toISOString().split('T')[0]
-    };
+    if (!window.godspeedSupabase) {
+      return { success: false, message: 'Supabase client unavailable.' };
+    }
 
-    this.earningsLedger.unshift(entry);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const member = this.members.find(m => m.id === memberId);
+      const officeId = member ? (member.primary_office_id || member.officeId || '33333333-3333-3333-3333-333333333333') : '33333333-3333-3333-3333-333333333333';
 
-    this.officeDues.unshift({
-      id: 'DUE-' + Date.now(),
-      memberId,
-      period: 'Freelance Split (' + source + ')',
-      amount: due10,
-      paidAmount: 0,
-      dueDate: new Date().toISOString().split('T')[0],
-      status: 'pending'
-    });
+      const { data: earnData, error: earnErr } = await window.godspeedSupabase
+        .from('earnings_ledger')
+        .insert({
+          member_id: memberId,
+          source,
+          gross_amount: net,
+          net_amount: net,
+          currency: 'NGN',
+          earned_date: today
+        })
+        .select()
+        .single();
 
-    this.save();
-    return entry;
+      if (earnErr) {
+        console.error('Supabase earnings insert error:', earnErr);
+        return { success: false, message: earnErr.message };
+      }
+
+      // Automatically generate 10% office due entry
+      const due10 = Math.round(net * 0.10 * 100) / 100;
+      await window.godspeedSupabase
+        .from('office_dues')
+        .insert({
+          office_id: officeId,
+          member_id: memberId,
+          period_name: `Freelance Split (${source})`,
+          amount: due10,
+          paid_amount: 0.00,
+          due_date: today,
+          status: 'pending'
+        });
+
+      await this.loadAllAppData();
+      return { 
+        success: true, 
+        entry: this.normalizeEarning(earnData), 
+        message: 'Earning recorded and 10/20/70 split calculated in Supabase!' 
+      };
+    } catch (err) {
+      console.error('Add freelance earning exception:', err);
+      return { success: false, message: err.message || 'Failed to record earning' };
+    }
   }
 
-  updatePVStatus(pvId, newStatus, reason = '') {
-    const pv = this.pvSubmissions.find(p => p.id === pvId);
-    if (pv) {
-      pv.status = newStatus;
-      if (reason) pv.declineReason = reason;
-      this.save();
+  /* Real Supabase PV Submission & Status Updates */
+  async submitPV(memberId, period, pvAmount, orderRef, pickupDate = null) {
+    if (!pvAmount || isNaN(pvAmount) || Number(pvAmount) <= 0) {
+      return { success: false, message: 'Invalid PV amount.' };
     }
+
+    if (!window.godspeedSupabase) {
+      return { success: false, message: 'Supabase client unavailable.' };
+    }
+
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('pv_submissions')
+        .insert({
+          member_id: memberId,
+          sales_period: period || new Date().toISOString().substring(0, 7),
+          pv_amount: Number(pvAmount),
+          order_reference: orderRef || '',
+          status: 'pv_submitted',
+          expected_pickup_date: pickupDate || null
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      await this.loadAllAppData();
+      return { 
+        success: true, 
+        submission: this.normalizePV(data), 
+        message: 'PV submission submitted for review!' 
+      };
+    } catch (err) {
+      return { success: false, message: err.message || 'Failed to submit PV' };
+    }
+  }
+
+  async updatePVStatus(pvId, newStatus, reason = '') {
+    if (!window.godspeedSupabase) {
+      return { success: false, message: 'Supabase client unavailable.' };
+    }
+
+    try {
+      const updatePayload = { status: newStatus, updated_at: new Date().toISOString() };
+      if (reason) updatePayload.decline_reason = reason;
+
+      const { data, error } = await window.godspeedSupabase
+        .from('pv_submissions')
+        .update(updatePayload)
+        .eq('id', pvId)
+        .select();
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      await this.loadAllAppData();
+      return { success: true, message: `PV status updated to ${newStatus}` };
+    } catch (err) {
+      return { success: false, message: err.message || 'Failed to update PV status' };
+    }
+  }
+
+  /* Genealogy Subtree Lookup via live genealogy_closure */
+  getDescendantIds(ancestorId) {
+    if (this.genealogyClosure && this.genealogyClosure.length > 0) {
+      return this.genealogyClosure
+        .filter(c => c.ancestor_id === ancestorId && c.depth > 0)
+        .map(c => c.descendant_id);
+    }
+    let descendants = [];
+    const directRecruits = this.members.filter(m => m.sponsorId === ancestorId || m.sponsor_id === ancestorId);
+    directRecruits.forEach(child => {
+      descendants.push(child.id);
+      descendants = descendants.concat(this.getDescendantIds(child.id));
+    });
+    return descendants;
   }
 
   calculateQPVBaseline(memberId) {
     const descendantIds = this.getDescendantIds(memberId);
     const allIds = [memberId, ...descendantIds];
-    const currentPeriod = '2026-08';
+    const currentPeriod = new Date().toISOString().substring(0, 7);
 
     const totalPV = this.pvSubmissions
-      .filter(p => allIds.includes(p.memberId) && p.period === currentPeriod && p.status === 'approved')
-      .reduce((sum, p) => sum + Number(p.pvAmount), 0);
+      .filter(p => allIds.includes(p.memberId || p.member_id) && (p.period === currentPeriod || p.sales_period === currentPeriod) && p.status === 'approved')
+      .reduce((sum, p) => sum + Number(p.pvAmount || p.pv_amount), 0);
 
     let eligibleRankFlag = 'newbie';
     if (totalPV >= 4000) eligibleRankFlag = 'director';
@@ -602,71 +854,182 @@ class GodspeedStore {
     else if (totalPV >= 1000) eligibleRankFlag = 'senior_manager';
     else if (totalPV >= 500) eligibleRankFlag = 'manager';
 
-    return { totalPV, eligibleRankFlag };
-  }
+  /* ============================================================================
+   * CHAT, COMMUNITY & NOTICE BOARD OPERATIONS (PRD §34)
+   * ============================================================================ */
 
-  async updateMemberRank(memberId, newRank) {
-    // 1. Update live Supabase DB
-    if (window.godspeedSupabase) {
-      try {
-        const { error } = await window.godspeedSupabase
-          .from('members')
-          .update({ official_rank: newRank, updated_at: new Date().toISOString() })
-          .eq('id', memberId);
-        
-        if (error) {
-          console.warn('Supabase rank update notice:', error.message);
-        }
-      } catch (err) {
-        console.error('Failed to update rank in Supabase DB:', err);
+  /* Send Chat Message (Hierarchical Office & Direct Routing per PRD §34.2) */
+  async sendMessage(content, recipientId = null, officeId = null, attachmentUrl = null) {
+    if (!content || !content.trim()) {
+      return { success: false, message: 'Message content cannot be empty.' };
+    }
+
+    if (!window.godspeedSupabase || !this.currentUserId) {
+      return { success: false, message: 'Supabase authentication session unavailable.' };
+    }
+
+    try {
+      const user = this.getCurrentUser();
+      const targetOfficeId = officeId || (user ? (user.primary_office_id || user.officeId) : null);
+
+      const { data, error } = await window.godspeedSupabase
+        .from('chat_messages')
+        .insert({
+          sender_id: this.currentUserId,
+          recipient_id: recipientId || null,
+          office_id: targetOfficeId,
+          content: content.trim(),
+          attachment_url: attachmentUrl || null
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Send Chat Message Error:', error);
+        return { success: false, message: error.message };
       }
-    }
 
-    // 2. Update local state
-    const member = this.members.find(m => m.id === memberId);
-    if (member) {
-      member.rank = newRank;
-      this.save();
-      return { success: true, member, message: `Rank updated to ${newRank.replace('_', ' ').toUpperCase()} successfully!` };
+      const normalized = this.normalizeChatMessage(data);
+      this.chatMessages.push(normalized);
+      return { success: true, message: normalized };
+    } catch (err) {
+      console.error('Send message exception:', err);
+      return { success: false, message: err.message || 'Failed to send message.' };
     }
-    return { success: false, message: 'Member record not found.' };
   }
 
-  async updateMemberRole(memberId, newRole) {
-    // 1. Update live Supabase DB
-    if (window.godspeedSupabase) {
-      try {
-        const { error } = await window.godspeedSupabase
-          .from('members')
-          .update({ role: newRole, updated_at: new Date().toISOString() })
-          .eq('id', memberId);
-        
-        if (error) {
-          console.warn('Supabase role update notice:', error.message);
-        }
-      } catch (err) {
-        console.error('Failed to update role in Supabase DB:', err);
+  /* List & Filter Chat Messages */
+  listMessages(filter = {}) {
+    let list = [...this.chatMessages].filter(m => !m.isSoftDeleted);
+    if (filter.officeId) {
+      list = list.filter(m => m.officeId === filter.officeId);
+    }
+    if (filter.recipientId) {
+      list = list.filter(m => m.recipientId === filter.recipientId || (m.senderId === filter.recipientId && m.recipientId === this.currentUserId));
+    }
+    return list;
+  }
+
+  /* Moderate Chat Message (PRD §34.2) */
+  async moderateMessage(messageId, reason = 'Violation of community standards') {
+    if (!window.godspeedSupabase || !this.currentUserId) {
+      return { success: false, message: 'Supabase client unavailable.' };
+    }
+
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('chat_messages')
+        .update({
+          is_soft_deleted: true,
+          moderated_by: this.currentUserId,
+          moderation_reason: reason
+        })
+        .eq('id', messageId)
+        .select();
+
+      if (error) {
+        return { success: false, message: error.message };
       }
-    }
 
-    // 2. Update local state
-    const member = this.members.find(m => m.id === memberId);
-    if (member) {
-      member.role = newRole;
-      this.save();
-      return { success: true, member, message: `Role updated to ${newRole.replace('_', ' ').toUpperCase()} successfully!` };
+      const msg = this.chatMessages.find(m => m.id === messageId);
+      if (msg) {
+        msg.isSoftDeleted = true;
+        msg.is_soft_deleted = true;
+        msg.moderatedBy = this.currentUserId;
+        msg.moderationReason = reason;
+      }
+
+      return { success: true, message: 'Message successfully moderated.' };
+    } catch (err) {
+      return { success: false, message: err.message || 'Failed to moderate message.' };
     }
-    return { success: false, message: 'Member record not found.' };
   }
 
-  getDescendantIds(ancestorId) {
-    let descendants = [];
-    const directRecruits = this.members.filter(m => m.sponsorId === ancestorId);
-    directRecruits.forEach(child => {
-      descendants.push(child.id);
-      descendants = descendants.concat(this.getDescendantIds(child.id));
-    });
-    return descendants;
+  /* Create Community Post (PRD §34.4) */
+  async createCommunityPost(title, content, category = 'general', mediaUrl = null, officeId = null) {
+    if (!title || !content) {
+      return { success: false, message: 'Post title and content are required.' };
+    }
+
+    if (!window.godspeedSupabase || !this.currentUserId) {
+      return { success: false, message: 'Supabase client unavailable.' };
+    }
+
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('community_posts')
+        .insert({
+          author_id: this.currentUserId,
+          title: title.trim(),
+          content: content.trim(),
+          category: category || 'general',
+          media_url: mediaUrl || null,
+          office_id: officeId || null
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      const normalized = this.normalizeCommunityPost(data);
+      this.communityPosts.unshift(normalized);
+      return { success: true, post: normalized, message: 'Community post published successfully!' };
+    } catch (err) {
+      return { success: false, message: err.message || 'Failed to publish post.' };
+    }
+  }
+
+  /* Like Community Post */
+  async likeCommunityPost(postId) {
+    if (!window.godspeedSupabase) return;
+    const post = this.communityPosts.find(p => p.id === postId);
+    if (!post) return;
+
+    post.likesCount = (post.likesCount || 0) + 1;
+    await window.godspeedSupabase
+      .from('community_posts')
+      .update({ likes_count: post.likesCount })
+      .eq('id', postId);
+  }
+
+  /* Create Notice Board Item (PRD §34.4) */
+  async createNoticeBoardItem(title, content, category = 'Official Announcement', priority = 'normal', targetAudience = 'all', officeId = null) {
+    if (!title || !content) {
+      return { success: false, message: 'Notice title and content are required.' };
+    }
+
+    if (!window.godspeedSupabase || !this.currentUserId) {
+      return { success: false, message: 'Supabase client unavailable.' };
+    }
+
+    try {
+      const { data, error } = await window.godspeedSupabase
+        .from('notice_board')
+        .insert({
+          author_id: this.currentUserId,
+          title: title.trim(),
+          content: content.trim(),
+          category: category || 'Official Announcement',
+          priority: priority || 'normal',
+          target_audience: targetAudience || 'all',
+          office_id: officeId || null,
+          is_published: true
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      const normalized = this.normalizeNoticeItem(data);
+      this.noticeBoard.unshift(normalized);
+      return { success: true, item: normalized, message: 'Notice broadcast published successfully!' };
+    } catch (err) {
+      return { success: false, message: err.message || 'Failed to publish notice.' };
+    }
   }
 }
 

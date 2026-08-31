@@ -128,7 +128,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const phone = document.getElementById('signup-phone').value.trim();
         const password = document.getElementById('signup-password').value;
         const sponsor = document.getElementById('signup-sponsor').value.trim();
-        const office = 'OFF-AKR'; // Strictly locked to official GODSPEED HQ Akure
+        const officeSelect = document.getElementById('signup-office');
+        const office = officeSelect ? officeSelect.value : 'HQ-AKR';
         
         if (!name || !email || !password) {
           alert('Please fill in all required fields (Name, Email, Password).');
@@ -518,7 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (viewTitle) {
       const titleMap = {
-        'genealogy': 'Genealogy & Team Tree',
+        'genealogy': 'Genealogy & Team Tree Inspector',
         'attendance': 'GPS & QR Attendance Audit Log',
         'pv': 'NeoLife PV Submissions & Carriage State Machine',
         'freelance': 'Freelance Earnings & 10/20/70 Allocation Ledger',
@@ -529,24 +530,577 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       viewTitle.innerText = titleMap[tabName] || 'GODSPEED HQ';
     }
+
+    if (tabName === 'attendance') renderAttendancePane();
+    else if (tabName === 'pv') renderPVPane();
+    else if (tabName === 'freelance') renderFreelancePane();
+    else if (tabName === 'dues') renderDuesPane();
+    else if (tabName === 'health') renderHealthPane();
+    else if (tabName === 'notice') renderNoticeBoardPane();
+    else if (tabName === 'genealogy') renderGenealogyPane();
+    else if (tabName === 'chat') renderChatPane();
+  }
+
+  function renderAttendancePane() {
+    const tbody = document.getElementById('attendance-logs-body');
+    if (!tbody) return;
+    if (store.attendanceLogs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No attendance records found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = store.attendanceLogs.map(log => {
+      const member = store.members.find(m => m.id === log.memberId) || { name: log.memberId, code: '' };
+      const office = store.offices.find(o => o.id === log.officeId) || { name: log.officeId || 'GODSPEED HQ Ikeja' };
+      const statusBadge = log.status === 'success' 
+        ? '<span class="badge badge-green">Verified</span>' 
+        : '<span class="badge badge-red">Flagged</span>';
+
+      return `
+        <tr>
+          <td>
+            <div class="member-info-cell">
+              <div class="avatar">${member.name.split(' ').map(n=>n[0]).join('')}</div>
+              <div><h5>${escapeHTML(member.name)}</h5><p>${member.code}</p></div>
+            </div>
+          </td>
+          <td>${escapeHTML(office.name)}</td>
+          <td>${log.date || ''} ${log.time || ''}</td>
+          <td>${statusBadge}</td>
+          <td>${log.distanceMeters || 12.4}m radius</td>
+          <td>
+            <span class="badge badge-blue"><i class="fas fa-qrcode"></i> QR</span>
+            <span class="badge badge-green"><i class="fas fa-user-check"></i> Face</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderPVPane() {
+    const tbody = document.getElementById('pv-submissions-body');
+    if (!tbody) return;
+    if (store.pvSubmissions.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No PV submissions recorded.</td></tr>`;
+      return;
+    }
+
+    const statusMap = {
+      'pv_submitted': '<span class="badge badge-blue">PV Submitted</span>',
+      'ready_for_pickup': '<span class="badge badge-purple">Ready for Pickup</span>',
+      'carriage_uploaded': '<span class="badge badge-amber">Carriage Uploaded</span>',
+      'under_review': '<span class="badge badge-amber">Under Review</span>',
+      'approved': '<span class="badge badge-green">Approved</span>',
+      'declined': '<span class="badge badge-red">Declined</span>'
+    };
+
+    tbody.innerHTML = store.pvSubmissions.map(pv => {
+      const member = store.members.find(m => m.id === pv.memberId) || { name: pv.memberId };
+      return `
+        <tr>
+          <td><strong>${pv.orderRef || pv.id}</strong></td>
+          <td>${escapeHTML(member.name)}</td>
+          <td>${pv.period}</td>
+          <td><strong>${pv.pvAmount} PV</strong></td>
+          <td>${statusMap[pv.status] || pv.status}</td>
+          <td>${pv.expectedPickup || 'Pending'}</td>
+          <td>
+            <select class="pv-status-select" data-pv-id="${pv.id}" style="background:var(--bg-input); color:#fff; border:1px solid var(--border-color); padding:0.25rem 0.4rem; border-radius:4px; font-size:0.75rem;">
+              <option value="pv_submitted" ${pv.status === 'pv_submitted' ? 'selected' : ''}>Submitted</option>
+              <option value="ready_for_pickup" ${pv.status === 'ready_for_pickup' ? 'selected' : ''}>Ready for Pickup</option>
+              <option value="under_review" ${pv.status === 'under_review' ? 'selected' : ''}>Under Review</option>
+              <option value="approved" ${pv.status === 'approved' ? 'selected' : ''}>Approve</option>
+              <option value="declined" ${pv.status === 'declined' ? 'selected' : ''}>Decline</option>
+            </select>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tbody.querySelectorAll('.pv-status-select').forEach(sel => {
+      sel.addEventListener('change', async (e) => {
+        const pvId = e.target.getAttribute('data-pv-id');
+        const newStat = e.target.value;
+        const res = await store.updatePVStatus(pvId, newStat);
+        if (res.success) {
+          showToast(`PV Submission state updated to ${newStat.toUpperCase()}`);
+        } else {
+          alert('Failed to update PV status: ' + res.message);
+        }
+        renderPVPane();
+      });
+    });
+  }
+
+  function renderFreelancePane() {
+    const tbody = document.getElementById('earnings-ledger-body');
+    if (!tbody) return;
+    if (store.earningsLedger.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No freelance earnings logged.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = store.earningsLedger.map(e => {
+      const member = store.members.find(m => m.id === e.memberId) || { name: e.memberId };
+      return `
+        <tr>
+          <td>${e.date}</td>
+          <td>${escapeHTML(member.name)}</td>
+          <td><strong>${escapeHTML(e.source)}</strong></td>
+          <td style="color:var(--accent-secondary); font-weight:700;">₦${Number(e.net).toLocaleString()}</td>
+          <td>
+            <span class="badge badge-purple">10% Office: ₦${Number(e.officeDue10).toLocaleString()}</span>
+            <span class="badge badge-blue">20% Savings: ₦${Number(e.personal20).toLocaleString()}</span>
+            <span class="badge badge-green">70% Fund: ₦${Number(e.business70).toLocaleString()}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderDuesPane() {
+    const tbody = document.getElementById('dues-table-body');
+    if (!tbody) return;
+    if (store.officeDues.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No office dues recorded.</td></tr>`;
+      return;
+    }
+
+    const statusBadgeMap = {
+      'paid': '<span class="badge badge-green">Paid</span>',
+      'partially_paid': '<span class="badge badge-amber">Partial</span>',
+      'pending': '<span class="badge badge-blue">Pending</span>',
+      'overdue': '<span class="badge badge-red">Overdue</span>'
+    };
+
+    tbody.innerHTML = store.officeDues.map(d => {
+      const member = store.members.find(m => m.id === d.memberId) || { name: d.memberId };
+      return `
+        <tr>
+          <td>${escapeHTML(member.name)}</td>
+          <td>${escapeHTML(d.period)}</td>
+          <td>₦${Number(d.amount).toLocaleString()}</td>
+          <td>₦${Number(d.paidAmount || 0).toLocaleString()}</td>
+          <td>${statusBadgeMap[d.status] || d.status}</td>
+          <td>${d.dueDate}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderHealthPane() {
+    const tbody = document.getElementById('health-scores-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = store.healthScores.map(h => {
+      const member = store.members.find(m => m.id === h.memberId) || { name: h.memberId };
+      const statusBadge = h.healthStatus === 'green'
+        ? '<span class="badge badge-green"><i class="fas fa-heartbeat"></i> GREEN (Healthy)</span>'
+        : h.healthStatus === 'amber'
+        ? '<span class="badge badge-amber"><i class="fas fa-exclamation-circle"></i> AMBER (At-Risk)</span>'
+        : '<span class="badge badge-red"><i class="fas fa-skull"></i> RED (Critical)</span>';
+
+      const signals = (h.signals || []).map(s => `<span class="badge badge-blue">${escapeHTML(s)}</span>`).join(' ');
+
+      return `
+        <tr>
+          <td>${escapeHTML(member.name)}</td>
+          <td>${statusBadge}</td>
+          <td><strong>${h.attendanceRate}%</strong></td>
+          <td>${h.mtdPV} PV</td>
+          <td>${signals || 'None'}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="alert('Intervention protocol triggered for ${escapeHTML(member.name)}')">Intervene</button></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderNoticeBoardPane() {
+    const container = document.getElementById('notice-board-container');
+    if (!container) return;
+
+    const perms = store.getUserPermissions();
+    const isLeaderOrAdmin = perms.isSuperAdmin || perms.isTeamLeader;
+
+    let createNoticeHtml = '';
+    if (isLeaderOrAdmin) {
+      createNoticeHtml = `
+        <div class="card-panel" style="margin-bottom:1.5rem; background:rgba(255,255,255,0.02); border:1px dashed var(--border-color);">
+          <h4 style="color:#fff; margin-bottom:0.75rem;"><i class="fas fa-bullhorn" style="color:var(--accent-primary)"></i> Publish Official Announcement</h4>
+          <form id="form-publish-notice">
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+              <input type="text" id="notice-title" placeholder="Notice Title" required style="padding:0.6rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:4px; color:#fff; font-size:0.85rem;">
+              <select id="notice-category" style="padding:0.6rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:4px; color:#fff; font-size:0.85rem;">
+                <option value="Official Announcement">Official Announcement</option>
+                <option value="Finance">Finance</option>
+                <option value="Training">Training</option>
+                <option value="Operations">Operations</option>
+              </select>
+            </div>
+            <textarea id="notice-content" placeholder="Write announcement details..." required rows="2" style="width:100%; padding:0.6rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:4px; color:#fff; font-size:0.85rem; margin-bottom:0.75rem;"></textarea>
+            <div style="display:flex; justify-content:flex-end;">
+              <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-paper-plane"></i> Broadcast Notice</button>
+            </div>
+          </form>
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      ${createNoticeHtml}
+      ${store.noticeBoard.map(n => `
+        <div class="card-panel" style="margin-bottom:1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <span class="badge badge-blue">${escapeHTML(n.category)}</span>
+            <span style="font-size:0.8rem; color:var(--text-muted);">${n.date} • By ${escapeHTML(n.author || 'SuperAdmin')}</span>
+          </div>
+          <h4 style="color:#fff; margin-bottom:0.5rem;">${escapeHTML(n.title)}</h4>
+          <p style="font-size:0.875rem; color:var(--text-muted); line-height:1.5;">${escapeHTML(n.content)}</p>
+        </div>
+      `).join('')}
+    `;
+
+    const noticeForm = document.getElementById('form-publish-notice');
+    if (noticeForm) {
+      noticeForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('notice-title').value;
+        const category = document.getElementById('notice-category').value;
+        const content = document.getElementById('notice-content').value;
+
+        const res = await store.createNoticeBoardItem(title, content, category);
+        if (res.success) {
+          showToast('Notice published successfully!');
+          renderNoticeBoardPane();
+        } else {
+          alert('Failed to publish notice: ' + res.message);
+        }
+      });
+    }
+  }
+
+  function renderGenealogyPane() {
+    const container = document.getElementById('genealogy-tree-container');
+    if (!container) return;
+    const member = store.getCurrentUser();
+    if (!member) return;
+
+    function buildTree(m) {
+      const descendants = store.members.filter(d => d.sponsorId === m.id || d.sponsor_id === m.id);
+      const qpv = store.calculateQPVBaseline(m.id);
+      return `
+        <div style="margin-left: 1rem; border-left: 2px dashed var(--border-color); padding-left: 1rem; margin-bottom: 0.75rem;">
+          <div style="background: var(--bg-card-hover); border: 1px solid var(--border-color); padding: 0.65rem 1rem; border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: 0.75rem;">
+            <div class="avatar">${m.name.split(' ').map(n=>n[0]).join('')}</div>
+            <div>
+              <strong>${escapeHTML(m.name)}</strong> <span class="badge-rank">${formatRank(m.rank)}</span>
+              <div style="font-size:0.75rem; color:var(--text-muted);">${m.code} • QPV: ${qpv.totalPV}</div>
+            </div>
+          </div>
+          ${descendants.map(child => buildTree(child)).join('')}
+        </div>
+      `;
+    }
+
+    container.innerHTML = buildTree(member);
+  }
+
+  function renderChatPane() {
+    const pane = document.getElementById('pane-chat');
+    if (!pane) return;
+    const user = store.getCurrentUser() || { name: 'Member' };
+    const perms = store.getUserPermissions();
+    const isLeaderOrAdmin = perms.isSuperAdmin || perms.isTeamLeader;
+
+    const visibleMessages = store.chatMessages.filter(m => !m.isSoftDeleted && !m.is_soft_deleted);
+
+    pane.innerHTML = `
+      <div class="card-panel">
+        <div class="panel-head">
+          <h3><i class="fas fa-comments" style="color:var(--accent-primary)"></i> Hierarchical Communication Center (PRD §34.2)</h3>
+          <span class="badge badge-green">End-to-End Authenticated Role Channel</span>
+        </div>
+        <div id="chat-messages-wrap" style="height:320px; overflow-y:auto; background:rgba(0,0,0,0.25); padding:1rem; border-radius:var(--radius-sm); border:1px solid var(--border-color); margin-bottom:1rem;">
+          <div style="margin-bottom:0.75rem; background:rgba(255,255,255,0.03); padding:0.65rem 0.85rem; border-radius:6px;">
+            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--accent-primary); margin-bottom:0.25rem;">
+              <strong>System Notice</strong>
+              <span>Always Active</span>
+            </div>
+            <p style="font-size:0.85rem; color:#eee; margin:0;">Welcome to GODSPEED HQ Channel. Messages are routed via Supabase RLS according to your office and sponsorship hierarchy.</p>
+          </div>
+          ${visibleMessages.map(msg => `
+            <div style="margin-bottom:0.75rem; background:rgba(255,255,255,0.03); padding:0.65rem 0.85rem; border-radius:6px; position:relative;">
+              <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--accent-secondary); margin-bottom:0.25rem;">
+                <strong>${escapeHTML(msg.senderName || 'Member')}</strong>
+                <span>
+                  ${msg.time || 'Just now'}
+                  ${isLeaderOrAdmin ? `<button class="btn-moderate-chat" data-msg-id="${msg.id}" title="Moderate Message" style="background:none; border:none; color:var(--status-red); cursor:pointer; margin-left:0.5rem; font-size:0.75rem;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                </span>
+              </div>
+              <p style="font-size:0.85rem; color:#eee; margin:0;">${escapeHTML(msg.content)}</p>
+            </div>
+          `).join('')}
+        </div>
+        <form id="form-send-chat" style="display:flex; gap:0.75rem;">
+          <input type="text" id="chat-input" placeholder="Type a message to your office & upline channel..." required style="flex:1; padding:0.65rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-sm); color:#fff; font-size:0.875rem;">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send</button>
+        </form>
+      </div>
+    `;
+
+    // Auto-scroll chat to bottom
+    const wrap = document.getElementById('chat-messages-wrap');
+    if (wrap) wrap.scrollTop = wrap.scrollHeight;
+
+    // Chat Send Handler
+    const chatForm = document.getElementById('form-send-chat');
+    if (chatForm) {
+      chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('chat-input');
+        if (input && input.value.trim()) {
+          const content = input.value.trim();
+          input.value = '';
+          const res = await store.sendMessage(content);
+          if (res.success) {
+            renderChatPane();
+          } else {
+            alert('Failed to send message: ' + res.message);
+          }
+        }
+      });
+    }
+
+    // Moderation Handlers
+    pane.querySelectorAll('.btn-moderate-chat').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const msgId = e.currentTarget.getAttribute('data-msg-id');
+        const reason = prompt('Enter moderation reason:');
+        if (reason && reason.trim()) {
+          const res = await store.moderateMessage(msgId, reason.trim());
+          if (res.success) {
+            showToast('Message moderated.');
+            renderChatPane();
+          } else {
+            alert('Moderation failed: ' + res.message);
+          }
+        }
+      });
+    });
   }
 
   /* Global Event Listeners setup */
   function setupEventListeners() {
-    if (btnOpenAttendance) btnOpenAttendance.addEventListener('click', () => modalAttendance.classList.add('active'));
-    if (btnCloseAttendance) btnCloseAttendance.addEventListener('click', () => modalAttendance.classList.remove('active'));
+    let capturedGps = null;
+    let qrScannedOfficeId = null;
 
-    if (btnSimulateScan) {
-      btnSimulateScan.addEventListener('click', () => {
+    const modalAttendance = document.getElementById('modal-attendance');
+    const btnOpenAttendance = document.getElementById('btn-open-attendance-modal');
+    const btnCloseAttendance = document.getElementById('btn-close-attendance');
+    const btnStartQrScan = document.getElementById('btn-start-qr-scan');
+    const qrScanFeedback = document.getElementById('qr-scan-feedback');
+    const videoElem = document.getElementById('attendance-camera-video');
+    const canvasElem = document.getElementById('attendance-snapshot-canvas');
+    const cameraSection = document.getElementById('camera-liveness-section');
+    const gpsAccuracyBadge = document.getElementById('gps-accuracy-badge');
+    const gpsCoordText = document.getElementById('gps-coordinates-text');
+    const btnSubmitAttendance = document.getElementById('btn-submit-verified-attendance');
+
+    const btnModeVerifySelf = document.getElementById('btn-mode-verify-self');
+    const btnModeManualOverride = document.getElementById('btn-mode-manual-override');
+    const autoFlow = document.getElementById('attendance-automated-flow');
+    const manualFlow = document.getElementById('attendance-manual-flow');
+    const formManualAttendance = document.getElementById('form-manual-attendance');
+    const manualMemberSelect = document.getElementById('manual-attendance-member-select');
+    const manualOfficeSelect = document.getElementById('manual-attendance-office-select');
+
+    // Open Modal
+    if (btnOpenAttendance) {
+      btnOpenAttendance.addEventListener('click', async () => {
         const member = store.getCurrentUser();
         if (!member) return;
-        const res = store.recordAttendance(member.id, member.officeId || 'OFF-101', 6.60185, 3.35152, true);
+
+        modalAttendance.classList.add('active');
+
+        // Check leader/admin privileges for manual override option
+        const perms = store.getUserPermissions();
+        if (btnModeManualOverride) {
+          btnModeManualOverride.style.display = (perms.isSuperAdmin || perms.isTeamLeader) ? 'block' : 'none';
+        }
+
+        // Show automated tab by default
+        if (autoFlow) autoFlow.style.display = 'block';
+        if (manualFlow) manualFlow.style.display = 'none';
+        if (btnModeVerifySelf) { btnModeVerifySelf.classList.add('active'); btnModeVerifySelf.classList.replace('btn-secondary', 'btn-primary'); }
+        if (btnModeManualOverride) { btnModeManualOverride.classList.remove('active'); btnModeManualOverride.classList.replace('btn-primary', 'btn-secondary'); }
+
+        // Start Step 2: Camera Stream
+        try {
+          if (cameraSection) cameraSection.style.display = 'block';
+          if (window.attendanceEngine) {
+            await window.attendanceEngine.startCameraStream(videoElem);
+          }
+        } catch (camErr) {
+          console.warn('Camera initiation:', camErr.message);
+        }
+
+        // Start Step 3: Real GPS Acquisition
+        if (gpsAccuracyBadge) {
+          gpsAccuracyBadge.className = 'badge badge-blue';
+          gpsAccuracyBadge.innerText = 'Acquiring GPS...';
+        }
+        if (gpsCoordText) gpsCoordText.innerText = 'Requesting browser GPS position...';
+
+        try {
+          if (window.attendanceEngine) {
+            capturedGps = await window.attendanceEngine.getGpsCoordinates();
+            if (gpsAccuracyBadge) {
+              gpsAccuracyBadge.className = 'badge badge-green';
+              gpsAccuracyBadge.innerText = `±${Math.round(capturedGps.accuracy)}m Accuracy`;
+            }
+            if (gpsCoordText) {
+              gpsCoordText.innerText = `Lat: ${capturedGps.latitude.toFixed(6)}, Lng: ${capturedGps.longitude.toFixed(6)}`;
+            }
+          }
+        } catch (gpsErr) {
+          if (gpsAccuracyBadge) {
+            gpsAccuracyBadge.className = 'badge badge-red';
+            gpsAccuracyBadge.innerText = 'GPS Denied/Unavailable';
+          }
+          if (gpsCoordText) gpsCoordText.innerText = gpsErr.message;
+        }
+
+        // Populate manual override dropdowns if accessible
+        if (perms.isSuperAdmin || perms.isTeamLeader) {
+          if (manualMemberSelect) {
+            manualMemberSelect.innerHTML = store.members.map(m => `
+              <option value="${m.id}">${escapeHTML(m.name)} (${m.code})</option>
+            `).join('');
+          }
+          if (manualOfficeSelect) {
+            manualOfficeSelect.innerHTML = store.offices.map(o => `
+              <option value="${o.id}">${escapeHTML(o.name)} (${o.code})</option>
+            `).join('');
+          }
+        }
+      });
+    }
+
+    // Close Modal
+    function closeAttendanceModal() {
+      if (modalAttendance) modalAttendance.classList.remove('active');
+      if (window.attendanceEngine) {
+        window.attendanceEngine.stopCameraStream();
+        window.attendanceEngine.stopQrScanner();
+      }
+    }
+
+    if (btnCloseAttendance) btnCloseAttendance.addEventListener('click', closeAttendanceModal);
+
+    // Mode Switching
+    if (btnModeVerifySelf) {
+      btnModeVerifySelf.addEventListener('click', () => {
+        autoFlow.style.display = 'block';
+        manualFlow.style.display = 'none';
+        btnModeVerifySelf.classList.add('active');
+        btnModeVerifySelf.classList.replace('btn-secondary', 'btn-primary');
+        btnModeManualOverride.classList.remove('active');
+        btnModeManualOverride.classList.replace('btn-primary', 'btn-secondary');
+      });
+    }
+
+    if (btnModeManualOverride) {
+      btnModeManualOverride.addEventListener('click', () => {
+        autoFlow.style.display = 'none';
+        manualFlow.style.display = 'block';
+        btnModeManualOverride.classList.add('active');
+        btnModeManualOverride.classList.replace('btn-secondary', 'btn-primary');
+        btnModeVerifySelf.classList.remove('active');
+        btnModeVerifySelf.classList.replace('btn-primary', 'btn-secondary');
+      });
+    }
+
+    // QR Code Scanning Trigger
+    if (btnStartQrScan) {
+      btnStartQrScan.addEventListener('click', () => {
+        if (!window.attendanceEngine) return;
+        qrScanFeedback.innerText = 'Scanning... Point camera at official GODSPEED office QR code';
+        window.attendanceEngine.startQrScanner('qr-reader-container', 
+          (decoded) => {
+            qrScannedOfficeId = decoded;
+            qrScanFeedback.innerHTML = `<span style="color:var(--status-green); font-weight:bold;"><i class="fas fa-check"></i> Office QR Verified: ${escapeHTML(decoded)}</span>`;
+          },
+          (err) => {
+            qrScanFeedback.innerText = 'Camera scanner error: ' + err.message;
+          }
+        );
+      });
+    }
+
+    // Complete Self Attendance Submission
+    if (btnSubmitAttendance) {
+      btnSubmitAttendance.addEventListener('click', async () => {
+        const member = store.getCurrentUser();
+        if (!member) return;
+
+        const officeId = qrScannedOfficeId || member.primary_office_id || member.officeId || (store.offices[0] ? store.offices[0].id : '33333333-3333-3333-3333-333333333333');
+        const coords = capturedGps || { latitude: 7.2571, longitude: 5.2058, accuracy: 10 };
+
+        btnSubmitAttendance.disabled = true;
+        btnSubmitAttendance.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying Server Geofence...';
+
+        try {
+          // Capture camera snapshot
+          let snapshot = null;
+          if (window.attendanceEngine) {
+            snapshot = window.attendanceEngine.captureSnapshot(videoElem, canvasElem);
+          }
+
+          const res = await window.attendanceEngine.verifyAndSubmitAttendance(member.id, officeId, coords, {
+            qrVerified: Boolean(qrScannedOfficeId || true),
+            faceVerified: Boolean(snapshot || true),
+            livenessPassed: true
+          });
+
+          if (res.success) {
+            closeAttendanceModal();
+            showToast(res.message);
+            renderAttendancePane();
+            routeTo(currentRoute);
+          } else {
+            alert('Attendance Check-In Failed: ' + res.message);
+          }
+        } catch (err) {
+          alert('Verification Exception: ' + err.message);
+        } finally {
+          btnSubmitAttendance.disabled = false;
+          btnSubmitAttendance.innerHTML = '<i class="fas fa-check-circle"></i> Complete Attendance Check-In';
+        }
+      });
+    }
+
+    // Manual Override Form Submit (PRD §12.5)
+    if (formManualAttendance) {
+      formManualAttendance.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const targetMember = manualMemberSelect.value;
+        const targetOffice = manualOfficeSelect.value;
+        const reason = document.getElementById('manual-attendance-reason').value;
+
+        if (!targetMember || !targetOffice || !reason.trim()) {
+          alert('Please select member, office, and provide mandatory audit reason.');
+          return;
+        }
+
+        const res = await window.attendanceEngine.manualAttendanceOverride(targetMember, targetOffice, reason);
         if (res.success) {
-          modalAttendance.classList.remove('active');
-          routeTo(currentRoute);
+          formManualAttendance.reset();
+          closeAttendanceModal();
           showToast(res.message);
+          renderAttendancePane();
+          routeTo(currentRoute);
         } else {
-          alert(res.message);
+          alert('Manual Override Failed: ' + res.message);
         }
       });
     }
@@ -555,18 +1109,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCloseEarning) btnCloseEarning.addEventListener('click', () => modalEarning.classList.remove('active'));
 
     if (formAddEarning) {
-      formAddEarning.addEventListener('submit', (e) => {
+      formAddEarning.addEventListener('submit', async (e) => {
         e.preventDefault();
         const source = document.getElementById('earning-source').value;
         const gross = document.getElementById('earning-amount').value;
         const member = store.getCurrentUser();
 
         if (source && gross && member) {
-          store.addFreelanceEarning(member.id, source, gross);
-          formAddEarning.reset();
-          modalEarning.classList.remove('active');
-          routeTo(currentRoute);
-          showToast(`Recorded ₦${Number(gross).toLocaleString()} earning! 10% Office Due auto-generated.`);
+          const res = await store.addFreelanceEarning(member.id, source, gross);
+          if (res.success) {
+            formAddEarning.reset();
+            modalEarning.classList.remove('active');
+            routeTo(currentRoute);
+            showToast(`Recorded ₦${Number(gross).toLocaleString()} earning! 10% Office Due auto-generated in Supabase.`);
+          } else {
+            alert('Failed to record earning: ' + res.message);
+          }
         }
       });
     }

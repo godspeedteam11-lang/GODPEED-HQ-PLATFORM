@@ -142,8 +142,9 @@
         <div class="form-group">
           <label for="signup-office">Primary GODSPEED Office</label>
           <select id="signup-office" class="form-select" required>
-            <option value="OFF-101">GODSPEED HQ Ikeja</option>
-            <option value="OFF-102">GODSPEED Abuja Hub</option>
+            <option value="HQ-AKR" selected>GODSPEED HQ Akure (Headquarters)</option>
+            <option value="HQ-LGS">GODSPEED HQ Ikeja</option>
+            <option value="HQ-ABJ">GODSPEED Abuja Hub</option>
           </select>
         </div>
 
@@ -542,22 +543,99 @@
 
   </div>
 
-  <!-- MODAL 1: GPS & QR ATTENDANCE SIMULATOR -->
+  <!-- MODAL 1: REAL GPS, QR & BIOMETRIC ATTENDANCE VERIFIER (PRD §12) -->
   <div class="modal-overlay" id="modal-attendance">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width:520px;">
       <div class="modal-header">
-        <h3><i class="fas fa-qrcode" style="color:var(--status-green)"></i> Record Attendance</h3>
+        <h3><i class="fas fa-qrcode" style="color:var(--status-green)"></i> Attendance Verification (PRD §12)</h3>
         <button class="close-btn" id="btn-close-attendance">&times;</button>
       </div>
-      <div class="scanner-box">
-        <div class="scanner-laser"></div>
-        <i class="fas fa-camera" style="font-size:2rem; color:var(--accent-primary); margin-bottom:0.5rem; display:block;"></i>
-        <span style="font-size:0.8rem; color:var(--text-muted);">Verifying Office Geofence & Facial Liveness...</span>
+
+      <!-- Mode Selector (Self Verification vs Leader Manual Override) -->
+      <div id="attendance-mode-selector" style="display:flex; gap:0.5rem; margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem;">
+        <button type="button" class="btn btn-sm btn-primary active" id="btn-mode-verify-self" style="flex:1;">
+          <i class="fas fa-shield-alt"></i> Automated 4-Step Verification
+        </button>
+        <button type="button" class="btn btn-sm btn-secondary" id="btn-mode-manual-override" style="flex:1; display:none;">
+          <i class="fas fa-user-edit"></i> Leader Manual Override
+        </button>
       </div>
-      <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
-        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-attendance').classList.remove('active')">Cancel</button>
-        <button type="button" class="btn btn-primary" id="btn-simulate-attendance-scan">Verify & Save Attendance</button>
+
+      <!-- Section A: Automated 4-Step Sequence -->
+      <div id="attendance-automated-flow">
+        <!-- Step 1: QR Code Scanner -->
+        <div id="qr-scan-section" style="margin-bottom:1rem;">
+          <div style="font-size:0.85rem; font-weight:600; color:#fff; margin-bottom:0.35rem;">
+            <i class="fas fa-qrcode" style="color:var(--accent-primary)"></i> Step 1: Scan Office QR Code
+          </div>
+          <div id="qr-reader-container" style="width:100%; border-radius:var(--radius-sm); overflow:hidden; border:1px dashed var(--border-color); background:rgba(0,0,0,0.3); min-height:160px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0.5rem;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-start-qr-scan">
+              <i class="fas fa-camera"></i> Launch QR Camera Scanner
+            </button>
+            <span id="qr-scan-feedback" style="font-size:0.75rem; color:var(--text-muted); margin-top:0.5rem;">Or click above to scan the physical office QR code</span>
+          </div>
+        </div>
+
+        <!-- Step 2: Facial Liveness Video Preview -->
+        <div id="camera-liveness-section" style="margin-bottom:1rem; display:none;">
+          <div style="font-size:0.85rem; font-weight:600; color:#fff; margin-bottom:0.35rem;">
+            <i class="fas fa-user-check" style="color:var(--status-green)"></i> Step 2: Facial Liveness & Identity
+          </div>
+          <div style="position:relative; width:100%; background:#000; border-radius:var(--radius-sm); overflow:hidden; border:1px solid var(--border-color); height:180px; display:flex; align-items:center; justify-content:center;">
+            <video id="attendance-camera-video" playsinline autoplay muted style="width:100%; height:100%; object-fit:cover;"></video>
+            <canvas id="attendance-snapshot-canvas" style="display:none;"></canvas>
+            <div id="liveness-badge" class="badge badge-green" style="position:absolute; bottom:8px; right:8px; font-size:0.7rem;">
+              <i class="fas fa-check-circle"></i> Camera Active
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: High-Accuracy GPS Status -->
+        <div id="gps-status-section" style="margin-bottom:1rem; background:rgba(255,255,255,0.03); padding:0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+            <span style="font-size:0.8rem; font-weight:600; color:#fff;">
+              <i class="fas fa-map-marker-alt" style="color:var(--status-blue)"></i> Step 3: High-Accuracy GPS Geofence
+            </span>
+            <span id="gps-accuracy-badge" class="badge badge-blue">Acquiring...</span>
+          </div>
+          <div id="gps-coordinates-text" style="font-size:0.75rem; color:var(--text-muted);">
+            Requesting browser GPS location...
+          </div>
+        </div>
+
+        <!-- Verification Actions -->
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-attendance').classList.remove('active')">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btn-submit-verified-attendance">
+            <i class="fas fa-check-circle"></i> Complete Attendance Check-In
+          </button>
+        </div>
       </div>
+
+      <!-- Section B: Audited Manual Override (for Leaders/Admins per PRD §12.5) -->
+      <div id="attendance-manual-flow" style="display:none;">
+        <form id="form-manual-attendance">
+          <div style="margin-bottom:1rem;">
+            <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">Target Member</label>
+            <select id="manual-attendance-member-select" required style="width:100%; padding:0.65rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-sm); color:#fff; font-size:0.875rem;"></select>
+          </div>
+          <div style="margin-bottom:1rem;">
+            <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">Target Office</label>
+            <select id="manual-attendance-office-select" required style="width:100%; padding:0.65rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-sm); color:#fff; font-size:0.875rem;"></select>
+          </div>
+          <div style="margin-bottom:1rem;">
+            <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">Mandatory Audit Override Reason (PRD §12.5)</label>
+            <textarea id="manual-attendance-reason" placeholder="e.g. Device camera malfunction confirmed on-site" required rows="3" style="width:100%; padding:0.65rem; background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-sm); color:#fff; font-size:0.875rem;"></textarea>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-attendance').classList.remove('active')">Cancel</button>
+            <button type="submit" class="btn btn-admin">
+              <i class="fas fa-stamp"></i> Record Audited Manual Override
+            </button>
+          </div>
+        </form>
+      </div>
+
     </div>
   </div>
 
@@ -587,8 +665,10 @@
 
   <!-- JavaScript Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/godspeed-store.js"></script>
+  <script src="js/attendance.js"></script>
   <script src="js/godspeed-app.js"></script>
 </body>
 </html>

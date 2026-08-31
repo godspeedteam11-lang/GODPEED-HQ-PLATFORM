@@ -58,12 +58,12 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Setup Admin Login Submit */
   function setupAdminLogin() {
     if (formAdminLogin) {
-      formAdminLogin.addEventListener('submit', (e) => {
+      formAdminLogin.addEventListener('submit', async (e) => {
         e.preventDefault();
         const email = document.getElementById('admin-email').value;
         const password = document.getElementById('admin-password').value;
 
-        const authRes = store.authenticateAdmin(email, password);
+        const authRes = await store.authenticateAdmin(email, password);
         if (authRes.success) {
           showToast(`Authenticated Control Center as ${authRes.member.name}`);
           showAdminPortal();
@@ -75,9 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Admin Logout Handler
     document.querySelectorAll('.btn-admin-logout').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
-        store.logout();
+        await store.logout();
         showToast('Control Center Session Terminated.');
         showAdminLogin();
       });
