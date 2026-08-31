@@ -125,25 +125,13 @@ class PaymentService {
         handler.openIframe();
         return { success: true, reference };
       } else {
-        // Fallback for sandboxed offline testing
-        const simulate = confirm(`[Paystack Sandbox Simulator]\n\nPay ₦${plan.amount.toLocaleString()} for ${plan.name}?\n\nReference: ${reference}\n\nClick OK to simulate verified payment.`);
-        if (simulate) {
-          await window.godspeedSupabase.rpc('handle_paystack_webhook', {
-            p_reference: reference,
-            p_event: 'charge.success',
-            p_payload: { simulated: true, amount: plan.amountKobo, reference }
-          });
-          await window.godspeedStore?.loadAllAppData();
-          if (onSuccess) onSuccess({ reference, status: 'success' });
-          return { success: true, reference };
-        } else {
-          if (onCancel) onCancel();
-          return { success: false, message: 'Cancelled by user' };
-        }
+        alert('Paystack Gateway is unavailable. Please check your internet connection and try again.');
+        if (onCancel) onCancel();
+        return { success: false, message: 'Paystack library could not be loaded' };
       }
     } catch (err) {
       console.error('Payment initiation exception:', err);
-      alert('Failed to launch payment gateway: ' + err.message);
+      alert('Failed to launch Paystack gateway: ' + err.message);
       return { success: false, message: err.message };
     }
   }

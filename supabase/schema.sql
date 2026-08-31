@@ -1540,17 +1540,39 @@ DECLARE
     v_tx public.payment_transactions%ROWTYPE;
     v_office public.offices%ROWTYPE;
     v_period_interval INTERVAL;
+    v_expected_amount NUMERIC(12,2);
 BEGIN
     SELECT * INTO v_tx FROM public.payment_transactions WHERE reference = p_reference;
     IF v_tx.id IS NULL THEN
-        RAISE EXCEPTION 'Transaction reference % not found', p_reference;
+        RAISE EXCEPTION 'Transaction reference % not found in database', p_reference;
+    END IF;
+
+    -- Prevent Replay Attack / Duplicate Processing
+    IF v_tx.status = 'success' THEN
+        RETURN jsonb_build_object('success', TRUE, 'status', 'already_processed', 'message', 'Transaction already confirmed.');
     END IF;
 
     IF p_event = 'charge.success' THEN
+        -- Expected Amount Validation
+        v_expected_amount := CASE 
+            WHEN v_tx.plan_id = 'starter_monthly' THEN 7500.00
+            WHEN v_tx.plan_id = 'growth_monthly' THEN 18000.00
+            WHEN v_tx.plan_id = 'starter_annual' THEN 75000.00
+            WHEN v_tx.plan_id = 'growth_annual' THEN 180000.00
+            ELSE NULL
+        END;
+
+        IF v_expected_amount IS NULL OR v_tx.amount < v_expected_amount THEN
+            UPDATE public.payment_transactions
+            SET status = 'failed', provider_response = p_payload
+            WHERE id = v_tx.id;
+            RAISE EXCEPTION 'Payment verification failed: Amount paid (₦%) does not match required plan amount (₦%)', v_tx.amount, v_expected_amount;
+        END IF;
+
         SELECT * INTO v_office FROM public.offices WHERE id = v_tx.office_id;
         v_period_interval := CASE WHEN v_tx.plan_id LIKE '%annual%' THEN INTERVAL '1 year' ELSE INTERVAL '1 month' END;
 
-        -- 1. Update Payment Transaction
+        -- 1. Update Payment Transaction Record
         UPDATE public.payment_transactions
         SET status = 'success',
             paid_at = NOW(),
@@ -1579,7 +1601,7 @@ BEGIN
         INSERT INTO public.subscription_events (
             office_id, event_type, amount_paid, notes
         ) VALUES (
-            v_tx.office_id, 'payment_received', v_tx.amount, 'Paystack payment reference: ' || p_reference
+            v_tx.office_id, 'payment_received', v_tx.amount, 'Verified Paystack payment reference: ' || p_reference
         );
 
         -- 5. Notify Office Owner
@@ -1589,7 +1611,7 @@ BEGIN
             v_tx.office_id,
             'system',
             '💳 Subscription Payment Confirmed',
-            'Your payment of ₦' || TO_CHAR(v_tx.amount, 'FM999,999.00') || ' was verified. Your ' || v_tx.plan_id || ' subscription is active.',
+            'Your payment of ₦' || TO_CHAR(v_tx.amount, 'FM999,999.00') || ' was verified. Your ' || v_tx.plan_id || ' subscription is now active.',
             '/office-settings'
         );
 
@@ -1602,6 +1624,12 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Security Boundary: Restrict Webhook Execution to Service Role
+REVOKE EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_paystack_webhook(TEXT, TEXT, JSONB) TO service_role;
 
 -- ============================================================================
 -- 18. AUTOMATED SERVER-SIDE REMINDER ENGINE (PRD & SaaS Spec §12)
