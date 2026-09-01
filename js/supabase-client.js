@@ -7,6 +7,9 @@ window.GODSPEED_CONFIG = {
   SUPABASE_URL: 'https://asxnnxbzqxadhwwizpzl.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzeG5ueGJ6cXhhZGh3d2l6cHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MzAwMDcsImV4cCI6MjEwMzQwNjAwN30.4xykBLvnvoteXAOH9isjVYqh9py6EMuBiQv2Rtu0TW4',
   
+  // Paystack Public Key (Set via window.LEGACYOS_PAYSTACK_PUBLIC_KEY or here before initiating payments)
+  PAYSTACK_PUBLIC_KEY: window.LEGACYOS_PAYSTACK_PUBLIC_KEY || '',
+
   // Production Security Flag: Set to false to disable local demo fallback, test credential pre-fills, and identity switcher
   ENABLE_DEMO_MODE: false
 };

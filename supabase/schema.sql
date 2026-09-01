@@ -165,11 +165,15 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
     qr_verified BOOLEAN DEFAULT FALSE,
     face_verified BOOLEAN DEFAULT FALSE,
     liveness_passed BOOLEAN DEFAULT FALSE,
+    snapshot_url TEXT,
     status attendance_status DEFAULT 'success',
     override_reason TEXT,
     override_by UUID REFERENCES members(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Idempotent column addition for attendance_logs
+ALTER TABLE public.attendance_logs ADD COLUMN IF NOT EXISTS snapshot_url TEXT;
 
 -- 7. OFFICE DUES TABLE
 CREATE TABLE IF NOT EXISTS office_dues (
@@ -379,6 +383,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     office_id UUID UNIQUE NOT NULL REFERENCES offices(id) ON DELETE CASCADE,
     plan_id VARCHAR(50) NOT NULL REFERENCES subscription_plans(id),
     status VARCHAR(30) NOT NULL DEFAULT 'trial', -- 'trial', 'active', 'past_due', 'cancelled', 'expired'
+    billing_cycle VARCHAR(20) NOT NULL DEFAULT 'monthly', -- 'monthly', 'annual'
     trial_start TIMESTAMPTZ DEFAULT NOW(),
     trial_end TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
     current_period_start TIMESTAMPTZ DEFAULT NOW(),
@@ -387,6 +392,12 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Idempotent column addition and constraint for subscriptions
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(20) DEFAULT 'monthly';
+DO $$ BEGIN
+    ALTER TABLE public.subscriptions ADD CONSTRAINT chk_subscriptions_billing_cycle CHECK (billing_cycle IN ('monthly', 'annual'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 22. SUBSCRIPTION EVENTS & AUDIT LOG TABLE
 CREATE TABLE IF NOT EXISTS subscription_events (
@@ -500,16 +511,45 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- Helper 5: Check if user is Director of a Network containing an Office
+CREATE OR REPLACE FUNCTION public.is_director_of_office(p_user_id UUID DEFAULT auth.uid(), p_office_id UUID DEFAULT NULL)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_user_id IS NULL OR p_office_id IS NULL THEN RETURN FALSE; END IF;
+    RETURN EXISTS (
+        SELECT 1 FROM public.director_networks dn
+        JOIN public.network_offices no ON no.network_id = dn.id
+        WHERE dn.director_id = p_user_id AND no.office_id = p_office_id
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
 -- ============================================================================
 -- FIELD PRIVILEGE GUARD TRIGGER (Role, Rank, and Sponsor Mutation Security)
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION public.guard_member_field_updates()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_is_office_creation BOOLEAN := FALSE;
 BEGIN
-    -- Only Super Admin or Admin can change role
-    IF (NEW.role IS DISTINCT FROM OLD.role) AND NOT public.is_super_admin(auth.uid()) THEN
-        RAISE EXCEPTION 'Unauthorized: Only Super Admins can modify member roles.';
+    -- Check if update is happening within trusted create_tenant_office() transaction
+    v_is_office_creation := COALESCE(current_setting('app.internal_office_creation', true), 'false') = 'true';
+
+    -- Role mutation validation
+    IF (NEW.role IS DISTINCT FROM OLD.role) THEN
+        IF v_is_office_creation THEN
+            -- During office creation onboarding, only the caller can be promoted to team_leader for their newly created office
+            IF NOT (
+                NEW.id = auth.uid() 
+                AND NEW.role = 'team_leader'::user_role
+                AND EXISTS (SELECT 1 FROM public.offices WHERE id = NEW.primary_office_id AND team_leader_id = auth.uid())
+            ) THEN
+                RAISE EXCEPTION 'Unauthorized: Role escalation bypass detected during office creation.';
+            END IF;
+        ELSIF NOT public.is_super_admin(auth.uid()) THEN
+            RAISE EXCEPTION 'Unauthorized: Only Super Admins can modify member roles.';
+        END IF;
     END IF;
 
     -- Only Super Admin or Team Leader can modify official_rank or highest_achieved_rank
@@ -864,7 +904,18 @@ DROP POLICY IF EXISTS "Notice board delete policy" ON notice_board;
 -- 1. OFFICES POLICIES
 -- ----------------------------------------------------------------------------
 CREATE POLICY "Offices select policy" ON offices
-    FOR SELECT USING (is_active = TRUE OR public.is_super_admin(auth.uid()) OR public.is_office_team_leader(auth.uid(), id));
+    FOR SELECT USING (
+        -- Super Admins and Admins can see all offices
+        public.is_super_admin(auth.uid())
+        -- Team Leaders can see their own office
+     OR public.is_office_team_leader(auth.uid(), id)
+        -- Network Directors can see offices linked to their director network
+     OR public.is_director_of_office(auth.uid(), id)
+        -- Members can see their assigned primary office
+     OR (public.get_user_office_id(auth.uid()) = id)
+        -- Unauthenticated visitors can view active offices for public routing, slug resolution, and signup
+     OR (auth.uid() IS NULL AND is_active = TRUE)
+    );
 
 CREATE POLICY "Offices insert policy" ON offices
     FOR INSERT WITH CHECK (public.is_super_admin(auth.uid()));
@@ -883,11 +934,21 @@ CREATE POLICY "Members select policy" ON members
         id = auth.uid() 
      OR public.is_super_admin(auth.uid()) 
      OR public.is_office_team_leader(auth.uid(), primary_office_id) 
+     OR public.is_director_of_office(auth.uid(), primary_office_id)
      OR public.is_ancestor_of(auth.uid(), id)
     );
 
 CREATE POLICY "Members insert policy" ON members
-    FOR INSERT WITH CHECK (id = auth.uid() OR public.is_super_admin(auth.uid()));
+    FOR INSERT WITH CHECK (
+        public.is_super_admin(auth.uid())
+     OR public.is_office_team_leader(auth.uid(), primary_office_id)
+     OR public.is_director_of_office(auth.uid(), primary_office_id)
+     OR (
+         id = auth.uid()
+         AND role = 'member'::user_role
+         AND EXISTS (SELECT 1 FROM public.offices o WHERE o.id = primary_office_id AND o.is_active = TRUE)
+     )
+    );
 
 CREATE POLICY "Members self update policy" ON members
     FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
@@ -1102,23 +1163,6 @@ CREATE POLICY "Notice board update policy" ON notice_board
 
 CREATE POLICY "Notice board delete policy" ON notice_board
     FOR DELETE USING (public.is_super_admin(auth.uid()));
-
--- ============================================================================
--- 12. LEGACYOS HELPER FUNCTIONS
--- ============================================================================
-
--- Helper: Check if user is Director of a Network containing an Office
-CREATE OR REPLACE FUNCTION public.is_director_of_office(p_user_id UUID DEFAULT auth.uid(), p_office_id UUID DEFAULT NULL)
-RETURNS BOOLEAN AS $$
-BEGIN
-    IF p_user_id IS NULL OR p_office_id IS NULL THEN RETURN FALSE; END IF;
-    RETURN EXISTS (
-        SELECT 1 FROM public.director_networks dn
-        JOIN public.network_offices no ON no.network_id = dn.id
-        WHERE dn.director_id = p_user_id AND no.office_id = p_office_id
-    );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ============================================================================
 -- 13. SERVER-SIDE MEMBER LIMIT ENFORCEMENT TRIGGER (LegacyOS Plan Bounds)
@@ -1427,7 +1471,9 @@ BEGIN
         TRUE
     ) RETURNING * INTO v_new_office;
 
-    -- 2. Promote Caller to Team Leader of this Office
+    -- 2. Promote Caller to Team Leader of this Office (Scoped securely to this transaction)
+    PERFORM set_config('app.internal_office_creation', 'true', true);
+
     UPDATE public.members
     SET role = 'team_leader'::user_role,
         primary_office_id = v_new_office.id,
@@ -1748,10 +1794,10 @@ BEGIN
 
     -- 3. Overdue Office Dues Reminders
     FOR r_due IN
-        SELECT od.id, od.member_id, od.office_id, od.expected_amount_ngn, m.full_name
+        SELECT od.id, od.member_id, od.office_id, (od.amount - COALESCE(od.paid_amount, 0.00)) AS outstanding_amount, m.full_name
         FROM public.office_dues od
         JOIN public.members m ON m.id = od.member_id
-        WHERE od.status = 'overdue'
+        WHERE od.status = 'overdue' AND (od.amount - COALESCE(od.paid_amount, 0.00)) > 0
     LOOP
         IF NOT EXISTS (
             SELECT 1 FROM public.notifications 
@@ -1767,7 +1813,7 @@ BEGIN
                 r_due.office_id,
                 'reminder',
                 '⚠️ Office Dues Overdue',
-                'Outstanding dues of ₦' || TO_CHAR(r_due.expected_amount_ngn, 'FM999,999.00') || ' are due for your office operations.',
+                'Outstanding dues of ₦' || TO_CHAR(r_due.outstanding_amount, 'FM999,999.00') || ' are due for your office operations.',
                 '/dues'
             );
             v_reminders_count := v_reminders_count + 1;
@@ -1796,6 +1842,9 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'training_attendance') THEN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.training_attendance;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'chat_messages') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
     END IF;
 EXCEPTION WHEN OTHERS THEN
     NULL; -- Safe fallback if publications are managed at project dashboard level

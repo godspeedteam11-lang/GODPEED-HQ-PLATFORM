@@ -258,6 +258,8 @@ class GodspeedStore {
       liveness_passed: a.liveness_passed ?? false,
       distanceMeters: a.distance_from_office_meters || a.distanceMeters || 0,
       distance_from_office_meters: a.distance_from_office_meters || a.distanceMeters || 0,
+      snapshotUrl: a.snapshot_url || a.snapshotUrl || null,
+      snapshot_url: a.snapshot_url || a.snapshotUrl || null,
       status: a.status || 'success',
       overrideReason: a.override_reason || a.overrideReason,
       override_reason: a.override_reason || a.overrideReason

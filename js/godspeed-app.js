@@ -2074,7 +2074,11 @@ document.addEventListener('DOMContentLoaded', () => {
             user.email,
             user.name,
             (res) => {
-              showToast(`Payment successful! Reference: ${res.reference}. Plan activated.`);
+              if (res.verified) {
+                showToast(`Payment verified! Reference: ${res.reference}. Plan activated.`);
+              } else {
+                showToast(`Payment submitted! Reference: ${res.reference}. Verification is processing in the background.`);
+              }
               renderOfficeSettingsPane();
             },
             () => {
@@ -2110,6 +2114,12 @@ document.addEventListener('DOMContentLoaded', () => {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'training_attendance' }, async () => {
           await store.loadAllAppData();
           if (currentRoute === '/training') renderTrainingPane();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, async () => {
+          await store.loadAllAppData();
+          if (currentRoute === '/chat' || currentRoute === '/community') {
+            renderChatPane();
+          }
         })
         .subscribe();
     } catch (err) {

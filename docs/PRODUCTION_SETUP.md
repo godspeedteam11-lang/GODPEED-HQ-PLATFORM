@@ -19,61 +19,86 @@ LegacyOS requires three distinct storage buckets in Supabase Storage.
 ### Storage Folder / Path Structure
 
 * **`office-assets/`**:
-  * Path pattern: `logos/{office_id}/logo.{ext}`
-  * Example: `logos/d9b2d63d-a169-424a-9b5b-0123456789ab/logo.png`
+  * Path pattern: `{office_id}/{filename}`
+  * Example: `d9b2d63d-a169-424a-9b5b-0123456789ab/logo.png`
 * **`member-avatars/`**:
-  * Path pattern: `avatars/{member_id}/avatar.{ext}`
-  * Example: `avatars/f7812bc4-3b2e-4344-9fa2-887766554433/avatar.jpg`
+  * Path pattern: `{member_id}/{filename}`
+  * Example: `f7812bc4-3b2e-4344-9fa2-887766554433/avatar.png`
 * **`attendance-snapshots/`**:
-  * Path pattern: `snapshots/{office_id}/{YYYY-MM-DD}/{log_id}.jpg`
-  * Example: `snapshots/d9b2d63d-a169-424a-9b5b-0123456789ab/2026-08-31/att-001.jpg`
+  * Path pattern: `{office_id}/{member_id}/{snapshot_id}.jpg`
+  * Example: `d9b2d63d-a169-424a-9b5b-0123456789ab/f7812bc4-3b2e-4344-9fa2-887766554433/snap_1787830000000.jpg`
 
 ### Database Tables Referencing Storage URLs
 
 * `public.offices.logo_url` &rarr; references `office-assets` public URL.
 * `public.members.avatar_url` &rarr; references `member-avatars` public URL.
-* `public.attendance_logs.snapshot_url` &rarr; references `attendance-snapshots` signed / private path.
+* `public.attendance_logs.snapshot_url` &rarr; references `attendance-snapshots` private Storage object path.
 
 ### Storage RLS Policies (Run in Supabase SQL Editor)
 
 ```sql
--- 1. office-assets: Public read, team leader upload
+-- 1. office-assets: Public read, team leader upload and update
 CREATE POLICY "Public Read Office Assets" ON storage.objects
     FOR SELECT USING (bucket_id = 'office-assets');
 
 CREATE POLICY "Team Leaders Upload Office Assets" ON storage.objects
     FOR INSERT WITH CHECK (
         bucket_id = 'office-assets' 
-        AND auth.role() = 'authenticated'
+        AND (
+            public.is_office_team_leader(auth.uid(), (storage.foldername(name))[1]::uuid)
+            OR public.is_super_admin(auth.uid())
+        )
     );
 
 CREATE POLICY "Team Leaders Update Office Assets" ON storage.objects
     FOR UPDATE USING (
         bucket_id = 'office-assets' 
-        AND auth.role() = 'authenticated'
+        AND (
+            public.is_office_team_leader(auth.uid(), (storage.foldername(name))[1]::uuid)
+            OR public.is_super_admin(auth.uid())
+        )
     );
 
--- 2. member-avatars: Public read, self upload
+-- 2. member-avatars: Public read, self upload and update
 CREATE POLICY "Public Read Member Avatars" ON storage.objects
     FOR SELECT USING (bucket_id = 'member-avatars');
 
 CREATE POLICY "Members Upload Own Avatar" ON storage.objects
     FOR INSERT WITH CHECK (
         bucket_id = 'member-avatars' 
-        AND auth.uid()::text = (storage.foldername(name))[2]
+        AND (
+            auth.uid()::text = (storage.foldername(name))[1]
+            OR public.is_super_admin(auth.uid())
+        )
     );
 
--- 3. attendance-snapshots: Office-scoped read/write
+CREATE POLICY "Members Update Own Avatar" ON storage.objects
+    FOR UPDATE USING (
+        bucket_id = 'member-avatars' 
+        AND (
+            auth.uid()::text = (storage.foldername(name))[1]
+            OR public.is_super_admin(auth.uid())
+        )
+    );
+
+-- 3. attendance-snapshots: Office-scoped private read/write
 CREATE POLICY "Members Upload Attendance Snapshot" ON storage.objects
     FOR INSERT WITH CHECK (
         bucket_id = 'attendance-snapshots' 
-        AND auth.role() = 'authenticated'
+        AND (
+            auth.uid()::text = (storage.foldername(name))[2]
+            OR public.is_super_admin(auth.uid())
+        )
     );
 
 CREATE POLICY "Team Leaders Read Attendance Snapshots" ON storage.objects
     FOR SELECT USING (
         bucket_id = 'attendance-snapshots' 
-        AND auth.role() = 'authenticated'
+        AND (
+            public.is_office_team_leader(auth.uid(), (storage.foldername(name))[1]::uuid)
+            OR auth.uid()::text = (storage.foldername(name))[2]
+            OR public.is_super_admin(auth.uid())
+        )
     );
 ```
 
@@ -81,7 +106,7 @@ CREATE POLICY "Team Leaders Read Attendance Snapshots" ON storage.objects
 
 ## 2. Supabase Realtime Replication
 
-The following tables must have Realtime enabled in the **Supabase Dashboard &rarr; Database &rarr; Publications (`supabase_realtime`)**:
+The following 5 tables must have Realtime enabled in the **Supabase Dashboard &rarr; Database &rarr; Publications (`supabase_realtime`)**:
 
 1. `public.earnings_ledger` — Triggers instant live earnings recalculations on the leaderboard.
 2. `public.notifications` — Dispatches instant toast alerts and celebration milestone banners.
@@ -107,7 +132,7 @@ The repository includes ready-to-deploy TypeScript functions in `supabase/functi
 
 ### Function 1: `paystack-webhook`
 * **Path**: `supabase/functions/paystack-webhook/index.ts`
-* **Purpose**: Receives server-to-server POST requests from Paystack, verifies the `x-paystack-signature` HMAC SHA512 header, and securely invokes `public.handle_paystack_webhook` using the Supabase Service Role key.
+* **Purpose**: Receives server-to-server POST requests from Paystack, verifies the `x-paystack-signature` HMAC SHA512 header (fails closed if secret missing or signature invalid), and securely invokes `public.handle_paystack_webhook` using the Supabase Service Role key.
 * **Required Secrets**: `PAYSTACK_SECRET_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 * **Deployment Command**:
   ```bash
@@ -172,10 +197,10 @@ SELECT * FROM cron.job;
 
 ### API Keys
 1. **Frontend Public Key**:
-   * Sourced from: Paystack Dashboard &rarr; Settings &rarr; API Keys & Webhooks &rarr; **Public Key** (`pk_live_...`).
-   * Configured in frontend via `window.LEGACYOS_PAYSTACK_PUBLIC_KEY = 'pk_live_...'`.
+   * Sourced from: Paystack Dashboard &rarr; Settings &rarr; API Keys & Webhooks &rarr; **Public Key** (`pk_live_...` or `pk_test_...`).
+   * Configured in frontend via `window.LEGACYOS_PAYSTACK_PUBLIC_KEY = 'pk_live_...'` or `window.GODSPEED_CONFIG.PAYSTACK_PUBLIC_KEY = 'pk_live_...'`.
 2. **Server Secret Key**:
-   * Sourced from: Paystack Dashboard &rarr; Settings &rarr; API Keys & Webhooks &rarr; **Secret Key** (`sk_live_...`).
+   * Sourced from: Paystack Dashboard &rarr; Settings &rarr; API Keys & Webhooks &rarr; **Secret Key** (`sk_live_...` or `sk_test_...`).
    * Configured in Supabase Edge Function secret `PAYSTACK_SECRET_KEY`.
 
 ### Webhook Configuration
@@ -189,7 +214,7 @@ SELECT * FROM cron.job;
    * Use Paystack test card (`4084 0840 0840 0840`, exp: `12/30`, CVV: `408`, OTP: `12345`).
    * Complete payment popup.
    * Verify that transaction appears in Paystack Dashboard with status `success`.
-   * Verify that office subscription transitions from `trial` to `active`.
+   * Verify that office subscription transitions from `trial` to `active` via Edge Function webhook invocation.
 2. **Live Mode**:
    * Switch Paystack toggle to **Live Mode**.
    * Replace public key with `pk_live_...` and secret key in Supabase Secrets with `sk_live_...`.
@@ -214,3 +239,32 @@ The LegacyOS codebase natively supports **both** routing paradigms simultaneousl
 2. **Hash Slug Routing**: `https://app.legacyosapp.com/#/o/office-slug`
    * Supported out of the box for environments without wildcard DNS.
    * Direct registration link: `https://app.legacyosapp.com/#/o/office-slug/join`
+
+---
+
+## 8. Database Architecture & Table Inventory (22 Tables)
+
+The complete LegacyOS database schema comprises 22 relational tables with Row-Level Security:
+
+1. **`offices`** — Core tenant directory, branding, subscription status, and geofence locations.
+2. **`members`** — User profiles, roles (`super_admin`, `admin`, `team_leader`, `trainer`, `finance_officer`, `member`), NeoLife ranks, and upline hierarchy links.
+3. **`genealogy_closure`** — Transitive closure table for sub-millisecond ancestor/descendant tree traversals.
+4. **`attendance_logs`** — Geofence-validated check-in logs with facial snapshot object paths (`snapshot_url`).
+5. **`office_dues`** — Monthly office dues tracking, receipts, and payment statuses.
+6. **`pv_submissions`** — Monthly NeoLife Point Value (PV) and carriage slip validation ledger.
+7. **`earnings_ledger`** — 10/20/70 freelance earnings splits (10% Dues, 20% Personal Savings, 70% Business Fund).
+8. **`health_scores`** — Member and office operational health status metrics (`green`, `amber`, `red`).
+9. **`chat_messages`** — Office team communication and messaging channel.
+10. **`community_posts`** — Organization-wide news feed, articles, and community announcements.
+11. **`notice_board`** — Pinboard announcements for office bulletin updates.
+12. **`director_networks`** — World Team Director multi-office networks.
+13. **`network_offices`** — Join table mapping offices to Director Networks.
+14. **`training_classes`** — Academy classes and syllabus curriculum tracking.
+15. **`training_class_members`** — Student roster enrolled in specific training classes.
+16. **`training_sessions`** — Individual scheduled session occurrences.
+17. **`training_attendance`** — Roll call verification for training sessions.
+18. **`subscription_plans`** — SaaS tier pricing definitions (`starter_monthly`, `growth_monthly`, `starter_annual`, `growth_annual`).
+19. **`subscriptions`** — Office subscription records with `billing_cycle` (`monthly` / `annual`).
+20. **`subscription_events`** — Historical audit trail of subscription activations, renewals, and payments.
+21. **`notifications`** — In-app alerts, automated reminders, and milestone celebration broadcasts.
+22. **`payment_transactions`** — Secure Paystack transaction reference ledger for verification and idempotency.

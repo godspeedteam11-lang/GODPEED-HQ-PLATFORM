@@ -6,7 +6,6 @@
 
 class PaymentService {
   constructor() {
-    this.PAYSTACK_PUBLIC_KEY = window.LEGACYOS_PAYSTACK_PUBLIC_KEY || 'pk_live_legacyos_placeholder';
     this.PLANS = {
       starter_monthly: {
         id: 'starter_monthly',
@@ -47,6 +46,18 @@ class PaymentService {
     };
   }
 
+  getPublicKey() {
+    const key = (typeof window !== 'undefined' && (
+      window.LEGACYOS_PAYSTACK_PUBLIC_KEY ||
+      window.GODSPEED_CONFIG?.PAYSTACK_PUBLIC_KEY ||
+      window.PAYSTACK_PUBLIC_KEY
+    )) || '';
+    if (!key || typeof key !== 'string' || key.trim() === '' || key.includes('placeholder')) {
+      return null;
+    }
+    return key.trim();
+  }
+
   getPlan(planId) {
     return this.PLANS[planId] || this.PLANS.starter_monthly;
   }
@@ -55,6 +66,15 @@ class PaymentService {
   async initiateSubscriptionPayment(officeId, planId, userEmail, userName, onSuccess, onCancel) {
     const plan = this.getPlan(planId);
     const reference = 'LEG-TX-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+
+    const publicKey = this.getPublicKey();
+    if (!publicKey) {
+      const msg = 'Payment Configuration Notice: Paystack Public Key is not configured. Please set window.LEGACYOS_PAYSTACK_PUBLIC_KEY or GODSPEED_CONFIG.PAYSTACK_PUBLIC_KEY with your valid pk_live_... or pk_test_... key.';
+      console.error(msg);
+      alert(msg);
+      if (onCancel) onCancel();
+      return { success: false, message: 'Paystack Public Key not configured' };
+    }
 
     if (!window.godspeedSupabase) {
       alert('Payment Error: Database connection is offline.');
@@ -88,7 +108,7 @@ class PaymentService {
 
       if (typeof PaystackPop !== 'undefined') {
         const handler = PaystackPop.setup({
-          key: this.PAYSTACK_PUBLIC_KEY,
+          key: publicKey,
           email: userEmail,
           amount: plan.amountKobo,
           currency: 'NGN',
@@ -101,21 +121,32 @@ class PaymentService {
             ]
           },
           callback: async (response) => {
-            // Verify payment server-side via RPC
-            const { data: verifyData, error: verifyErr } = await window.godspeedSupabase.rpc('handle_paystack_webhook', {
-              p_reference: response.reference,
-              p_event: 'charge.success',
-              p_payload: response
-            });
+            console.log('Paystack transaction callback received:', response.reference);
+            
+            // Browser never invokes handle_paystack_webhook RPC directly (service_role restricted).
+            // Server-to-server webhook verifies signature and activates subscription.
+            // Poll transaction status to detect verified server-side completion:
+            let isVerified = false;
+            for (let attempt = 0; attempt < 6; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 2500));
+              try {
+                const { data: tx } = await window.godspeedSupabase
+                  .from('payment_transactions')
+                  .select('status')
+                  .eq('reference', response.reference)
+                  .single();
 
-            if (verifyErr) {
-              console.error('Server verification error:', verifyErr);
-              alert('Payment received! Status update is processing.');
-            } else {
-              await window.godspeedStore?.loadAllAppData();
+                if (tx && tx.status === 'success') {
+                  isVerified = true;
+                  break;
+                }
+              } catch (_pollErr) {
+                // Ignore transient network errors during status poll
+              }
             }
 
-            if (onSuccess) onSuccess(response);
+            await window.godspeedStore?.loadAllAppData();
+            if (onSuccess) onSuccess({ ...response, verified: isVerified });
           },
           onClose: () => {
             if (onCancel) onCancel();
